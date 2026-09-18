@@ -94,18 +94,52 @@ ALIASES_VISITA = {
 CAMPOS_VISITA_OBRIGATORIOS = ["matricula", "data_visita", "status"]
 CAMPOS_VISITA_OPCIONAIS = ["motivo", "motivo_alt", "os", "colaborador", "endereco", "observacao"]
 
+def montar_df_visita(df_bruto, mapeamento):
+    df_padrao = pd.DataFrame(index=df_bruto.index)
+    for campo in ["matricula", "data_visita", "status", "os", "colaborador", "endereco", "observacao"]:
+        coluna = mapeamento.get(campo)
+        if coluna and coluna != "(nenhuma)" and coluna in df_bruto.columns:
+            df_padrao[campo] = df_bruto[coluna]
+        else:
+            df_padrao[campo] = ""
+
+    def serie_ou_vazia(nome_campo):
+        coluna = mapeamento.get(nome_campo)
+        if coluna and coluna != "(nenhuma)" and coluna in df_bruto.columns:
+            return df_bruto[coluna].fillna("").astype(str).str.strip()
+        return pd.Series([""] * len(df_bruto), index=df_bruto.index)
+
+    serie_motivo = serie_ou_vazia("motivo")
+    serie_motivo_alt = serie_ou_vazia("motivo_alt")
+    motivo_final = serie_motivo.where(serie_motivo != "", serie_motivo_alt)
+
+    df_padrao["motivo"] = motivo_final
+    status_base = df_padrao["status"].fillna("").astype(str).str.strip()
+    df_padrao["status"] = status_base.where(motivo_final == "", status_base + " - " + motivo_final)
+    return df_padrao
+
+
 with aba_visitas:
     st.write(
-        "Envie o arquivo exportado do field. Cada linha é uma visita/OS. "
-        "Visitas já importadas (mesma matrícula + data + OS + status) não "
-        "são duplicadas."
+        "Envie o(s) arquivo(s) exportado(s) do field — pode selecionar vários "
+        "de uma vez (ex: um por dia). Cada linha é uma visita/OS. Visitas já "
+        "importadas (mesma matrícula + data + OS + status) não são duplicadas."
     )
-    arquivo = st.file_uploader(
-        "Arquivo do field (Excel ou CSV)", type=["xlsx", "xls", "csv"], key="upload_field"
+    arquivos = st.file_uploader(
+        "Arquivo(s) do field (Excel ou CSV)",
+        type=["xlsx", "xls", "csv"],
+        key="upload_field",
+        accept_multiple_files=True,
     )
-    if arquivo is not None:
-        df_bruto = io_utils.ler_arquivo(arquivo)
+    if arquivos:
+        df_bruto = io_utils.ler_arquivo(arquivos[0])
         st.dataframe(df_bruto.head(20), use_container_width=True)
+        if len(arquivos) > 1:
+            st.caption(
+                f"{len(arquivos)} arquivos selecionados. O mapeamento de colunas abaixo "
+                f"(baseado em **{arquivos[0].name}**) será aplicado a todos — assume que "
+                "têm a mesma estrutura de colunas."
+            )
 
         st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
         colunas_disponiveis = list(df_bruto.columns)
@@ -128,29 +162,28 @@ with aba_visitas:
         if faltando:
             st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando)}")
         elif st.button("Importar para o histórico", type="primary"):
-            df_padrao = pd.DataFrame()
-            for campo in ["matricula", "data_visita", "status", "os", "colaborador", "endereco", "observacao"]:
-                coluna = mapeamento.get(campo)
-                df_padrao[campo] = df_bruto[coluna] if coluna and coluna != "(nenhuma)" else ""
-
-            coluna_motivo = mapeamento.get("motivo")
-            coluna_motivo_alt = mapeamento.get("motivo_alt")
-            serie_motivo = df_bruto[coluna_motivo] if coluna_motivo and coluna_motivo != "(nenhuma)" else pd.Series([""] * len(df_bruto))
-            serie_motivo_alt = (
-                df_bruto[coluna_motivo_alt] if coluna_motivo_alt and coluna_motivo_alt != "(nenhuma)" else pd.Series([""] * len(df_bruto))
+            barra = st.progress(0.0, text="Importando...")
+            total_novas = 0
+            total_duplicadas = 0
+            erros = []
+            for i, arq in enumerate(arquivos):
+                try:
+                    df_bruto_i = df_bruto if i == 0 else io_utils.ler_arquivo(arq)
+                    df_padrao = montar_df_visita(df_bruto_i, mapeamento)
+                    novas, duplicadas = db.importar_visitas(df_padrao, arq.name)
+                    total_novas += novas
+                    total_duplicadas += duplicadas
+                except Exception as e:
+                    erros.append(f"{arq.name}: {e}")
+                barra.progress((i + 1) / len(arquivos), text=f"Importando {i + 1}/{len(arquivos)}: {arq.name}")
+            barra.empty()
+            st.toast(
+                f"{total_novas} visita(s) nova(s) em {len(arquivos)} arquivo(s). "
+                f"{total_duplicadas} já existiam e foram ignoradas.",
+                icon="✅",
             )
-            serie_motivo = serie_motivo.fillna("").astype(str).str.strip()
-            serie_motivo_alt = serie_motivo_alt.fillna("").astype(str).str.strip()
-            motivo_final = serie_motivo.where(serie_motivo != "", serie_motivo_alt)
-
-            df_padrao["motivo"] = motivo_final
-            status_base = df_padrao["status"].fillna("").astype(str).str.strip()
-            df_padrao["status"] = status_base.where(
-                motivo_final == "", status_base + " - " + motivo_final
-            )
-
-            novas, duplicadas = db.importar_visitas(df_padrao, arquivo.name)
-            st.toast(f"{novas} visita(s) nova(s) importada(s). {duplicadas} já existiam e foram ignoradas.", icon="✅")
+            if erros:
+                st.error("Alguns arquivos tiveram erro e foram pulados:\n" + "\n".join(erros))
             st.rerun()
 
 ALIASES_CADASTRAL = {
@@ -164,20 +197,47 @@ ALIASES_CADASTRAL = {
 CAMPOS_CADASTRAL_OBRIGATORIOS = ["matricula"]
 CAMPOS_CADASTRAL_CONHECIDOS = ["matricula", "endereco", "periodo", "consumo", "qtd_economias", "situacao_documental"]
 
+def montar_df_cadastral(df_bruto, mapeamento_cad, colunas_extras_escolhidas, coluna_periodo, usa_periodo):
+    df_cad_padrao = pd.DataFrame(index=df_bruto.index)
+    for campo in ["matricula", "endereco", "consumo", "qtd_economias", "situacao_documental"]:
+        coluna = mapeamento_cad.get(campo)
+        if coluna and coluna != "(nenhuma)" and coluna in df_bruto.columns:
+            df_cad_padrao[campo] = df_bruto[coluna]
+        else:
+            df_cad_padrao[campo] = ""
+    if usa_periodo and coluna_periodo in df_bruto.columns:
+        df_cad_padrao["_periodo"] = df_bruto[coluna_periodo]
+    for coluna in colunas_extras_escolhidas:
+        if coluna in df_bruto.columns:
+            df_cad_padrao[coluna] = df_bruto[coluna]
+    return df_cad_padrao
+
+
 with aba_cadastral:
     st.write(
-        "Envie a base cadastral atual. Se a base tiver uma linha por "
-        "matrícula por mês (ex: histórico de consumo), mapeie também a "
-        "coluna de período — o app calcula consumo médio, consumo do "
-        "último mês e quantos meses tiveram consumo zero."
+        "Envie a base cadastral — pode selecionar vários arquivos de uma vez "
+        "(ex: um por mês). Se a base tiver uma linha por matrícula por mês "
+        "(histórico de consumo), mapeie também a coluna de período: o app "
+        "acumula os períodos de todos os arquivos importados (mesmo em "
+        "envios separados) e calcula consumo médio, consumo do período mais "
+        "recente e quantos períodos tiveram consumo zero."
     )
-    arquivo_cad = st.file_uploader(
-        "Base cadastral (Excel ou CSV)", type=["xlsx", "xls", "csv"], key="upload_cadastral"
+    arquivos_cad = st.file_uploader(
+        "Base cadastral (Excel ou CSV)",
+        type=["xlsx", "xls", "csv"],
+        key="upload_cadastral",
+        accept_multiple_files=True,
     )
-    if arquivo_cad is not None:
-        df_cad_bruto = io_utils.ler_arquivo(arquivo_cad)
+    if arquivos_cad:
+        df_cad_bruto = io_utils.ler_arquivo(arquivos_cad[0])
         st.dataframe(df_cad_bruto.head(20), use_container_width=True)
-        st.caption(f"{len(df_cad_bruto)} linha(s) no arquivo enviado.")
+        if len(arquivos_cad) > 1:
+            st.caption(
+                f"{len(arquivos_cad)} arquivos selecionados. O mapeamento abaixo, baseado em "
+                f"**{arquivos_cad[0].name}** ({len(df_cad_bruto)} linha(s)), será aplicado a todos."
+            )
+        else:
+            st.caption(f"{len(df_cad_bruto)} linha(s) no arquivo enviado.")
 
         st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
         colunas_disponiveis_cad = list(df_cad_bruto.columns)
@@ -206,23 +266,29 @@ with aba_cadastral:
             st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando_cad)}")
         elif st.button("Atualizar base cadastral", type="primary"):
             coluna_periodo = mapeamento_cad.get("periodo")
-            usa_periodo = coluna_periodo and coluna_periodo != "(nenhuma)"
+            usa_periodo = bool(coluna_periodo and coluna_periodo != "(nenhuma)")
 
-            df_cad_padrao = pd.DataFrame()
-            for campo in ["matricula", "endereco", "consumo", "qtd_economias", "situacao_documental"]:
-                coluna = mapeamento_cad.get(campo)
-                df_cad_padrao[campo] = df_cad_bruto[coluna] if coluna and coluna != "(nenhuma)" else ""
-            if usa_periodo:
-                df_cad_padrao["_periodo"] = df_cad_bruto[coluna_periodo]
-            for coluna in colunas_extras_escolhidas:
-                df_cad_padrao[coluna] = df_cad_bruto[coluna]
-
-            total = db.atualizar_cadastral(
-                df_cad_padrao,
-                colunas_extras_escolhidas,
-                coluna_periodo="_periodo" if usa_periodo else None,
-            )
+            barra = st.progress(0.0, text="Processando...")
+            total = 0
+            erros = []
+            for i, arq in enumerate(arquivos_cad):
+                try:
+                    df_cad_bruto_i = df_cad_bruto if i == 0 else io_utils.ler_arquivo(arq)
+                    df_cad_padrao = montar_df_cadastral(
+                        df_cad_bruto_i, mapeamento_cad, colunas_extras_escolhidas, coluna_periodo, usa_periodo
+                    )
+                    total = db.atualizar_cadastral(
+                        df_cad_padrao,
+                        colunas_extras_escolhidas,
+                        coluna_periodo="_periodo" if usa_periodo else None,
+                    )
+                except Exception as e:
+                    erros.append(f"{arq.name}: {e}")
+                barra.progress((i + 1) / len(arquivos_cad), text=f"Processando {i + 1}/{len(arquivos_cad)}: {arq.name}")
+            barra.empty()
             st.toast(f"Base cadastral atualizada. {total} matrícula(s) no total.", icon="✅")
+            if erros:
+                st.error("Alguns arquivos tiveram erro e foram pulados:\n" + "\n".join(erros))
             st.rerun()
 
 with aba_gerar:

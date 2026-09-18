@@ -37,15 +37,20 @@ def inicializar_banco():
         CREATE TABLE IF NOT EXISTS cadastral (
             matricula TEXT PRIMARY KEY,
             endereco TEXT,
-            consumo_medio REAL,
-            consumo_ultimo_mes REAL,
-            meses_consumo_zero INTEGER,
-            periodo_referencia TEXT,
             qtd_economias INTEGER,
             situacao_documental TEXT,
             dados_extra TEXT,
             atualizado_em TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS consumo_mensal (
+            matricula TEXT NOT NULL,
+            periodo TEXT,
+            periodo_chave TEXT NOT NULL,
+            consumo REAL,
+            PRIMARY KEY (matricula, periodo_chave)
+        );
+        CREATE INDEX IF NOT EXISTS idx_consumo_matricula ON consumo_mensal(matricula);
 
         CREATE TABLE IF NOT EXISTS regras_resfriamento (
             status TEXT PRIMARY KEY,
@@ -63,18 +68,27 @@ def inicializar_banco():
     conn.close()
 
 
+def _texto(valor):
+    """Normaliza um valor de célula para string, tratando NaN/None como
+    vazio (evita que apareçam literais 'nan'/'None' nos dados)."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return ""
+    return str(valor).strip()
+
+
 def _to_float(valor):
+    texto = _texto(valor)
+    if not texto:
+        return None
     try:
-        return float(str(valor).replace(",", "."))
+        return float(texto.replace(",", "."))
     except (TypeError, ValueError):
         return None
 
 
 def _to_int(valor):
-    try:
-        return int(float(str(valor).replace(",", ".")))
-    except (TypeError, ValueError):
-        return None
+    numero = _to_float(valor)
+    return int(numero) if numero is not None else None
 
 
 def importar_visitas(df, arquivo_origem):
@@ -86,9 +100,9 @@ def importar_visitas(df, arquivo_origem):
     novas = 0
     duplicadas = 0
     for _, row in df.iterrows():
-        matricula = str(row.get("matricula", "")).strip()
-        data_visita = str(row.get("data_visita", "")).strip()
-        status = str(row.get("status", "")).strip()
+        matricula = _texto(row.get("matricula"))
+        data_visita = _texto(row.get("data_visita"))
+        status = _texto(row.get("status"))
         if not matricula or not data_visita or not status:
             continue
         cur.execute(
@@ -99,11 +113,11 @@ def importar_visitas(df, arquivo_origem):
                 matricula,
                 data_visita,
                 status,
-                str(row.get("motivo", "") or "").strip(),
-                str(row.get("os", "") or "").strip(),
-                str(row.get("colaborador", "") or "").strip(),
-                str(row.get("endereco", "") or "").strip(),
-                str(row.get("observacao", "") or "").strip(),
+                _texto(row.get("motivo")),
+                _texto(row.get("os")),
+                _texto(row.get("colaborador")),
+                _texto(row.get("endereco")),
+                _texto(row.get("observacao")),
                 arquivo_origem,
                 agora,
             ),
@@ -120,22 +134,24 @@ def importar_visitas(df, arquivo_origem):
 def atualizar_cadastral(df, colunas_extra, coluna_periodo=None):
     """Atualiza (upsert) os dados cadastrais por matrícula.
 
-    Se `coluna_periodo` for informado (ex: base com uma linha por matrícula
-    por mês), o df é agrupado por matrícula antes de gravar: os campos
-    estáticos (endereço, economias, situação) vêm da linha do período mais
-    recente, e o consumo é resumido em consumo médio, consumo do último mês
-    e quantidade de meses com consumo zero — sinais úteis para priorizar
-    quem parece ter parado de consumir.
+    O consumo é gravado em `consumo_mensal`, uma linha por matrícula+período
+    (upsert por período): isso permite importar a base em vários arquivos
+    separados ao longo do tempo (ex: um arquivo por mês, ou reimportações)
+    sem perder os períodos já registrados antes — cada novo arquivo apenas
+    acrescenta ou atualiza os períodos que ele traz.
+
+    Os campos estáticos (endereço, economias, situação) são atualizados com
+    o valor da linha do período mais recente **dentro deste arquivo**.
 
     `colunas_extra` são colunas adicionais do df guardadas como JSON junto
-    de cada matrícula (usa sempre o valor do período mais recente).
+    de cada matrícula (valor do período mais recente deste arquivo).
     """
     conn = conectar()
     cur = conn.cursor()
     agora = datetime.now().isoformat(timespec="seconds")
 
     df = df.copy()
-    df["matricula"] = df["matricula"].astype(str).str.strip()
+    df["matricula"] = df["matricula"].fillna("").astype(str).str.strip()
     df = df[df["matricula"] != ""]
     if "consumo" in df.columns:
         df["_consumo_num"] = df["consumo"].apply(_to_float)
@@ -143,48 +159,43 @@ def atualizar_cadastral(df, colunas_extra, coluna_periodo=None):
         df["_consumo_num"] = pd.Series([None] * len(df), index=df.index)
 
     if coluna_periodo and coluna_periodo in df.columns:
+        df["_periodo_raw"] = df[coluna_periodo].apply(_texto)
         df["_periodo_chave"] = df[coluna_periodo].apply(_to_periodo_ordenavel)
-        grupos = df.sort_values("_periodo_chave").groupby("matricula", sort=False)
     else:
-        df["_periodo_chave"] = None
-        grupos = df.groupby("matricula", sort=False)
+        df["_periodo_raw"] = "único"
+        df["_periodo_chave"] = "0"
 
+    for _, row in df.iterrows():
+        cur.execute(
+            """INSERT INTO consumo_mensal (matricula, periodo, periodo_chave, consumo)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(matricula, periodo_chave) DO UPDATE SET
+                 periodo=excluded.periodo,
+                 consumo=excluded.consumo""",
+            (row["matricula"], row["_periodo_raw"], row["_periodo_chave"], row["_consumo_num"]),
+        )
+
+    grupos = df.sort_values("_periodo_chave").groupby("matricula", sort=False)
     for matricula, grupo in grupos:
         ultima_linha = grupo.iloc[-1]
-        consumos = grupo["_consumo_num"].dropna()
-        consumo_medio = float(consumos.mean()) if len(consumos) else None
-        consumo_ultimo_mes = ultima_linha["_consumo_num"]
-        consumo_ultimo_mes = None if pd.isna(consumo_ultimo_mes) else float(consumo_ultimo_mes)
-        meses_consumo_zero = int((grupo["_consumo_num"] == 0).sum())
-        periodo_referencia = str(ultima_linha.get(coluna_periodo, "") or "") if coluna_periodo else None
-
         extra = {c: ultima_linha.get(c) for c in colunas_extra if c in df.columns}
         extra_json = json.dumps(extra, default=str, ensure_ascii=False)
 
         cur.execute(
             """INSERT INTO cadastral
-               (matricula, endereco, consumo_medio, consumo_ultimo_mes, meses_consumo_zero,
-                periodo_referencia, qtd_economias, situacao_documental, dados_extra, atualizado_em)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (matricula, endereco, qtd_economias, situacao_documental, dados_extra, atualizado_em)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(matricula) DO UPDATE SET
                  endereco=excluded.endereco,
-                 consumo_medio=excluded.consumo_medio,
-                 consumo_ultimo_mes=excluded.consumo_ultimo_mes,
-                 meses_consumo_zero=excluded.meses_consumo_zero,
-                 periodo_referencia=excluded.periodo_referencia,
                  qtd_economias=excluded.qtd_economias,
                  situacao_documental=excluded.situacao_documental,
                  dados_extra=excluded.dados_extra,
                  atualizado_em=excluded.atualizado_em""",
             (
                 matricula,
-                str(ultima_linha.get("endereco", "") or ""),
-                consumo_medio,
-                consumo_ultimo_mes,
-                meses_consumo_zero,
-                periodo_referencia,
+                _texto(ultima_linha.get("endereco")),
                 _to_int(ultima_linha.get("qtd_economias")),
-                str(ultima_linha.get("situacao_documental", "") or ""),
+                _texto(ultima_linha.get("situacao_documental")),
                 extra_json,
                 agora,
             ),
@@ -198,7 +209,7 @@ def atualizar_cadastral(df, colunas_extra, coluna_periodo=None):
 def _to_periodo_ordenavel(valor):
     """Converte um período tipo 'MM/YYYY' ou 'YYYY-MM' em algo ordenável
     (string 'YYYYMM'). Cai no valor original (como texto) se não reconhecer."""
-    texto = str(valor or "").strip()
+    texto = _texto(valor)
     partes = texto.replace("-", "/").split("/")
     if len(partes) == 2:
         a, b = partes
@@ -256,8 +267,40 @@ def ultima_visita_por_matricula():
 
 
 def obter_cadastral():
+    """Devolve os dados cadastrais com o consumo agregado a partir de todos
+    os períodos já importados (mesmo vindos de arquivos diferentes ao longo
+    do tempo): consumo médio, consumo do período mais recente e quantos
+    períodos tiveram consumo zero."""
     conn = conectar()
-    rows = conn.execute("SELECT * FROM cadastral").fetchall()
+    rows = conn.execute(
+        """
+        WITH ranqueado AS (
+            SELECT matricula, periodo, periodo_chave, consumo,
+                   ROW_NUMBER() OVER (PARTITION BY matricula ORDER BY periodo_chave DESC) AS posicao
+            FROM consumo_mensal
+        ),
+        agregado AS (
+            SELECT matricula,
+                   AVG(consumo) AS consumo_medio,
+                   SUM(CASE WHEN consumo = 0 THEN 1 ELSE 0 END) AS meses_consumo_zero
+            FROM consumo_mensal
+            GROUP BY matricula
+        ),
+        ultimo AS (
+            SELECT matricula, periodo AS periodo_referencia, consumo AS consumo_ultimo_mes
+            FROM ranqueado
+            WHERE posicao = 1
+        )
+        SELECT c.*,
+               agregado.consumo_medio,
+               agregado.meses_consumo_zero,
+               ultimo.periodo_referencia,
+               ultimo.consumo_ultimo_mes
+        FROM cadastral c
+        LEFT JOIN agregado ON agregado.matricula = c.matricula
+        LEFT JOIN ultimo ON ultimo.matricula = c.matricula
+        """
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

@@ -16,21 +16,25 @@ base é gerada contra esse histórico completo, não contra um único arquivo.
 
 ## Como funciona
 
-1. **Importar visitas (field)** — sobe o arquivo do field. O app já
-   sugere automaticamente o mapeamento de colunas para exportações comuns
-   (ex: `Matrícula`, `Data`, `Status da Atividade`, `Motivo de Não
-   Execução`), mas qualquer coluna pode ser remapeada manualmente. Quando
-   existir uma coluna de motivo (ou duas, ex: "Cobrança" e "Normal"), o
-   motivo é combinado com o status para regras de resfriamento mais
-   precisas (ex: `Encerrada com Ocorrência - CLIENTE AUSENTE`). Visitas
-   repetidas (mesma matrícula + data + OS + status) são ignoradas
-   automaticamente.
-2. **Atualizar base cadastral** — sobe a base cadastral atual (consumo,
-   quantidade de economias, situação documental, e quaisquer outras
-   colunas de interesse, como potencial de incremento). Se a base tiver
-   uma linha por matrícula **por mês** (histórico de consumo), mapeie
-   também a coluna de período — o app agrupa por matrícula e calcula
-   consumo médio, consumo do último mês e quantos meses tiveram consumo
+1. **Importar visitas (field)** — sobe um ou vários arquivos do field de
+   uma vez (ex: um por dia — selecione todos juntos no seletor de
+   arquivos). O app já sugere automaticamente o mapeamento de colunas para
+   exportações comuns (ex: `Matrícula`, `Data`, `Status da Atividade`,
+   `Motivo de Não Execução`), com base no primeiro arquivo, aplicado a
+   todos; pode ser remapeado manualmente. Quando existir uma coluna de
+   motivo (ou duas, ex: "Cobrança" e "Normal"), o motivo é combinado com o
+   status para regras de resfriamento mais precisas (ex: `Encerrada com
+   Ocorrência - CLIENTE AUSENTE`). Visitas repetidas (mesma matrícula +
+   data + OS + status) são ignoradas automaticamente, mesmo vindas de
+   arquivos diferentes.
+2. **Atualizar base cadastral** — sobe um ou vários arquivos da base
+   cadastral (consumo, quantidade de economias, situação documental, e
+   quaisquer outras colunas de interesse, como potencial de incremento).
+   Se a base tiver uma linha por matrícula **por período** (histórico de
+   consumo), mapeie também a coluna de período — o app acumula os
+   períodos de todos os arquivos já importados (mesmo em envios separados
+   ao longo do tempo, ex: um arquivo por mês) e calcula consumo médio,
+   consumo do período mais recente e quantos períodos tiveram consumo
    zero (sinal forte de ligação ativa mas sem uso — possível oportunidade
    ou irregularidade).
 3. **Regras de resfriamento** (barra lateral) — define, por status de
