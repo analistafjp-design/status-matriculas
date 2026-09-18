@@ -9,6 +9,7 @@ _FORMATOS_DATA = (
     "%Y-%m-%d",
     "%d/%m/%Y",
     "%d-%m-%Y",
+    "%d/%m/%y",
     "%Y-%m-%d %H:%M:%S",
     "%d/%m/%Y %H:%M:%S",
 )
@@ -80,7 +81,10 @@ def gerar_base_alvos(ordenar_por=None, ordem_decrescente=True):
         linha = {
             "matricula": matricula,
             "endereco": reg.get("endereco"),
-            "consumo": reg.get("consumo"),
+            "consumo_medio": reg.get("consumo_medio"),
+            "consumo_ultimo_mes": reg.get("consumo_ultimo_mes"),
+            "meses_consumo_zero": reg.get("meses_consumo_zero"),
+            "periodo_referencia": reg.get("periodo_referencia"),
             "qtd_economias": reg.get("qtd_economias"),
             "situacao_documental": reg.get("situacao_documental"),
             "status_ultima_visita": status_ultima,

@@ -13,6 +13,6 @@ def ler_arquivo(arquivo):
             arquivo.seek(0)
             df = pd.read_csv(arquivo, sep=";", dtype=str, encoding="latin1")
     else:
-        df = pd.read_excel(arquivo, dtype=str)
+        df = pd.read_excel(arquivo, dtype=str, engine="openpyxl")
     df.columns = [str(c).strip() for c in df.columns]
     return df

@@ -41,8 +41,35 @@ with st.sidebar:
             if str(row["status"]).strip() and pd.notna(row["dias"])
         }
         db.substituir_regras(novas_regras)
-        st.success("Regras salvas.")
+        st.toast("Regras salvas.", icon="✅")
         st.rerun()
+
+
+def sugerir_coluna(colunas_disponiveis, aliases):
+    """Tenta achar automaticamente qual coluna do arquivo corresponde a um
+    campo, comparando com uma lista de nomes conhecidos (aliases). Primeiro
+    tenta igualdade exata (sem acentuar maiúsc/minúsc.), depois substring."""
+    normalizadas = {c: c.strip().lower() for c in colunas_disponiveis}
+    for alias in aliases:
+        alias_norm = alias.strip().lower()
+        for coluna, norm in normalizadas.items():
+            if norm == alias_norm:
+                return coluna
+    for alias in aliases:
+        alias_norm = alias.strip().lower()
+        for coluna, norm in normalizadas.items():
+            if alias_norm in norm:
+                return coluna
+    return "(nenhuma)"
+
+
+def caixa_mapeamento(colunas_disponiveis, campo, obrigatorio, aliases, key_prefix):
+    rotulo = f"{campo}{' *' if obrigatorio else ''}"
+    sugestao = sugerir_coluna(colunas_disponiveis, aliases)
+    opcoes = ["(nenhuma)"] + colunas_disponiveis
+    indice = opcoes.index(sugestao) if sugestao in opcoes else 0
+    return st.selectbox(rotulo, opcoes, index=indice, key=f"{key_prefix}_{campo}")
+
 
 aba_visitas, aba_cadastral, aba_gerar, aba_consulta = st.tabs(
     [
@@ -53,8 +80,19 @@ aba_visitas, aba_cadastral, aba_gerar, aba_consulta = st.tabs(
     ]
 )
 
+ALIASES_VISITA = {
+    "matricula": ["Matrícula", "matricula", "NUM_LIGACAO", "UC"],
+    "data_visita": ["Data", "Data da Visita", "data_visita"],
+    "status": ["Status da Atividade", "status"],
+    "motivo": ["Motivo de Não Execução - Normal", "Motivo de Não Execução", "motivo"],
+    "motivo_alt": ["Motivo de Não Execução - Cobrança"],
+    "os": ["ID da Atividade", "Cód. Protocolo Origem", "OS de Origem", "os"],
+    "colaborador": ["Recurso", "Técnico", "colaborador"],
+    "endereco": ["Endereço", "endereco"],
+    "observacao": ["Observação", "Observações", "observacao"],
+}
 CAMPOS_VISITA_OBRIGATORIOS = ["matricula", "data_visita", "status"]
-CAMPOS_VISITA_OPCIONAIS = ["os", "colaborador", "endereco", "observacao"]
+CAMPOS_VISITA_OPCIONAIS = ["motivo", "motivo_alt", "os", "colaborador", "endereco", "observacao"]
 
 with aba_visitas:
     st.write(
@@ -69,35 +107,69 @@ with aba_visitas:
         df_bruto = io_utils.ler_arquivo(arquivo)
         st.dataframe(df_bruto.head(20), use_container_width=True)
 
-        st.write("Mapeie as colunas do arquivo para os campos abaixo:")
-        colunas_disponiveis = ["(nenhuma)"] + list(df_bruto.columns)
+        st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
+        colunas_disponiveis = list(df_bruto.columns)
         mapeamento = {}
         campos = CAMPOS_VISITA_OBRIGATORIOS + CAMPOS_VISITA_OPCIONAIS
         colunas_ui = st.columns(3)
         for i, campo in enumerate(campos):
             with colunas_ui[i % 3]:
                 obrigatorio = campo in CAMPOS_VISITA_OBRIGATORIOS
-                rotulo = f"{campo}{' *' if obrigatorio else ''}"
-                mapeamento[campo] = st.selectbox(rotulo, colunas_disponiveis, key=f"map_visita_{campo}")
+                mapeamento[campo] = caixa_mapeamento(
+                    colunas_disponiveis, campo, obrigatorio, ALIASES_VISITA.get(campo, []), "map_visita"
+                )
+        st.caption(
+            "`motivo` e `motivo_alt`: motivo de não execução, quando existir mais de uma coluna "
+            "(ex: 'Cobrança' e 'Normal'). Quando preenchido, é combinado com o status "
+            "(ex: 'Cancelada - CLIENTE AUSENTE') para permitir regras de resfriamento mais precisas."
+        )
 
         faltando = [c for c in CAMPOS_VISITA_OBRIGATORIOS if mapeamento.get(c) in (None, "(nenhuma)")]
         if faltando:
             st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando)}")
         elif st.button("Importar para o histórico", type="primary"):
             df_padrao = pd.DataFrame()
-            for campo, coluna in mapeamento.items():
-                df_padrao[campo] = df_bruto[coluna] if coluna != "(nenhuma)" else ""
+            for campo in ["matricula", "data_visita", "status", "os", "colaborador", "endereco", "observacao"]:
+                coluna = mapeamento.get(campo)
+                df_padrao[campo] = df_bruto[coluna] if coluna and coluna != "(nenhuma)" else ""
+
+            coluna_motivo = mapeamento.get("motivo")
+            coluna_motivo_alt = mapeamento.get("motivo_alt")
+            serie_motivo = df_bruto[coluna_motivo] if coluna_motivo and coluna_motivo != "(nenhuma)" else pd.Series([""] * len(df_bruto))
+            serie_motivo_alt = (
+                df_bruto[coluna_motivo_alt] if coluna_motivo_alt and coluna_motivo_alt != "(nenhuma)" else pd.Series([""] * len(df_bruto))
+            )
+            serie_motivo = serie_motivo.fillna("").astype(str).str.strip()
+            serie_motivo_alt = serie_motivo_alt.fillna("").astype(str).str.strip()
+            motivo_final = serie_motivo.where(serie_motivo != "", serie_motivo_alt)
+
+            df_padrao["motivo"] = motivo_final
+            status_base = df_padrao["status"].fillna("").astype(str).str.strip()
+            df_padrao["status"] = status_base.where(
+                motivo_final == "", status_base + " - " + motivo_final
+            )
+
             novas, duplicadas = db.importar_visitas(df_padrao, arquivo.name)
-            st.success(f"{novas} visita(s) nova(s) importada(s). {duplicadas} já existiam e foram ignoradas.")
+            st.toast(f"{novas} visita(s) nova(s) importada(s). {duplicadas} já existiam e foram ignoradas.", icon="✅")
             st.rerun()
 
+ALIASES_CADASTRAL = {
+    "matricula": ["NUM_LIGACAO", "Matrícula", "matricula", "UC"],
+    "endereco": ["END_LIGACAO", "Endereço", "endereco"],
+    "periodo": ["Mês/Ano", "Mes/Ano", "periodo", "mes_ano", "Referência"],
+    "consumo": ["CON_MEDIDO", "CON_FAT_AGUA", "consumo"],
+    "qtd_economias": ["TOTAL_ECO", "Numero De Economias", "Quantidade De Economia", "qtd_economias"],
+    "situacao_documental": ["SIT_CONTRATO", "SIT_LIG", "situacao_documental"],
+}
 CAMPOS_CADASTRAL_OBRIGATORIOS = ["matricula"]
-CAMPOS_CADASTRAL_CONHECIDOS = ["matricula", "endereco", "consumo", "qtd_economias", "situacao_documental"]
+CAMPOS_CADASTRAL_CONHECIDOS = ["matricula", "endereco", "periodo", "consumo", "qtd_economias", "situacao_documental"]
 
 with aba_cadastral:
     st.write(
-        "Envie a base cadastral atual. Os dados de cada matrícula são "
-        "atualizados (a versão mais recente enviada substitui a anterior)."
+        "Envie a base cadastral atual. Se a base tiver uma linha por "
+        "matrícula por mês (ex: histórico de consumo), mapeie também a "
+        "coluna de período — o app calcula consumo médio, consumo do "
+        "último mês e quantos meses tiveram consumo zero."
     )
     arquivo_cad = st.file_uploader(
         "Base cadastral (Excel ou CSV)", type=["xlsx", "xls", "csv"], key="upload_cadastral"
@@ -105,22 +177,27 @@ with aba_cadastral:
     if arquivo_cad is not None:
         df_cad_bruto = io_utils.ler_arquivo(arquivo_cad)
         st.dataframe(df_cad_bruto.head(20), use_container_width=True)
+        st.caption(f"{len(df_cad_bruto)} linha(s) no arquivo enviado.")
 
-        st.write("Mapeie as colunas do arquivo para os campos abaixo:")
-        colunas_disponiveis_cad = ["(nenhuma)"] + list(df_cad_bruto.columns)
+        st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
+        colunas_disponiveis_cad = list(df_cad_bruto.columns)
         mapeamento_cad = {}
         colunas_ui = st.columns(3)
         for i, campo in enumerate(CAMPOS_CADASTRAL_CONHECIDOS):
             with colunas_ui[i % 3]:
                 obrigatorio = campo in CAMPOS_CADASTRAL_OBRIGATORIOS
-                rotulo = f"{campo}{' *' if obrigatorio else ''}"
-                mapeamento_cad[campo] = st.selectbox(rotulo, colunas_disponiveis_cad, key=f"map_cad_{campo}")
+                mapeamento_cad[campo] = caixa_mapeamento(
+                    colunas_disponiveis_cad, campo, obrigatorio, ALIASES_CADASTRAL.get(campo, []), "map_cad"
+                )
+        st.caption(
+            "`periodo` é opcional: deixe '(nenhuma)' se sua base já tem uma linha por matrícula."
+        )
 
         colunas_mapeadas = {v for v in mapeamento_cad.values() if v != "(nenhuma)"}
         colunas_extras_disponiveis = [c for c in df_cad_bruto.columns if c not in colunas_mapeadas]
         colunas_extras_escolhidas = st.multiselect(
             "Outras colunas para manter junto de cada matrícula (ex: potencial "
-            "de incremento, tipo de serviço, outras oportunidades)",
+            "de incremento, categoria do imóvel, outras oportunidades)",
             colunas_extras_disponiveis,
         )
 
@@ -128,13 +205,24 @@ with aba_cadastral:
         if faltando_cad:
             st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando_cad)}")
         elif st.button("Atualizar base cadastral", type="primary"):
+            coluna_periodo = mapeamento_cad.get("periodo")
+            usa_periodo = coluna_periodo and coluna_periodo != "(nenhuma)"
+
             df_cad_padrao = pd.DataFrame()
-            for campo, coluna in mapeamento_cad.items():
-                df_cad_padrao[campo] = df_cad_bruto[coluna] if coluna != "(nenhuma)" else ""
+            for campo in ["matricula", "endereco", "consumo", "qtd_economias", "situacao_documental"]:
+                coluna = mapeamento_cad.get(campo)
+                df_cad_padrao[campo] = df_cad_bruto[coluna] if coluna and coluna != "(nenhuma)" else ""
+            if usa_periodo:
+                df_cad_padrao["_periodo"] = df_cad_bruto[coluna_periodo]
             for coluna in colunas_extras_escolhidas:
                 df_cad_padrao[coluna] = df_cad_bruto[coluna]
-            total = db.atualizar_cadastral(df_cad_padrao, colunas_extras_escolhidas)
-            st.success(f"Base cadastral atualizada. {total} matrícula(s) no total.")
+
+            total = db.atualizar_cadastral(
+                df_cad_padrao,
+                colunas_extras_escolhidas,
+                coluna_periodo="_periodo" if usa_periodo else None,
+            )
+            st.toast(f"Base cadastral atualizada. {total} matrícula(s) no total.", icon="✅")
             st.rerun()
 
 with aba_gerar:

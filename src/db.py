@@ -2,6 +2,8 @@ import json
 import sqlite3
 from datetime import datetime
 
+import pandas as pd
+
 from config import DB_PATH, REGRAS_RESFRIAMENTO_PADRAO
 
 
@@ -21,6 +23,7 @@ def inicializar_banco():
             matricula TEXT NOT NULL,
             data_visita TEXT NOT NULL,
             status TEXT NOT NULL,
+            motivo TEXT,
             os TEXT,
             colaborador TEXT,
             endereco TEXT,
@@ -34,7 +37,10 @@ def inicializar_banco():
         CREATE TABLE IF NOT EXISTS cadastral (
             matricula TEXT PRIMARY KEY,
             endereco TEXT,
-            consumo REAL,
+            consumo_medio REAL,
+            consumo_ultimo_mes REAL,
+            meses_consumo_zero INTEGER,
+            periodo_referencia TEXT,
             qtd_economias INTEGER,
             situacao_documental TEXT,
             dados_extra TEXT,
@@ -87,12 +93,13 @@ def importar_visitas(df, arquivo_origem):
             continue
         cur.execute(
             """INSERT OR IGNORE INTO visitas
-               (matricula, data_visita, status, os, colaborador, endereco, observacao, arquivo_origem, importado_em)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (matricula, data_visita, status, motivo, os, colaborador, endereco, observacao, arquivo_origem, importado_em)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 matricula,
                 data_visita,
                 status,
+                str(row.get("motivo", "") or "").strip(),
                 str(row.get("os", "") or "").strip(),
                 str(row.get("colaborador", "") or "").strip(),
                 str(row.get("endereco", "") or "").strip(),
@@ -110,35 +117,74 @@ def importar_visitas(df, arquivo_origem):
     return novas, duplicadas
 
 
-def atualizar_cadastral(df, colunas_extra):
-    """Atualiza (upsert) os dados cadastrais por matrícula. `colunas_extra`
-    são colunas adicionais do df guardadas como JSON junto de cada matrícula."""
+def atualizar_cadastral(df, colunas_extra, coluna_periodo=None):
+    """Atualiza (upsert) os dados cadastrais por matrícula.
+
+    Se `coluna_periodo` for informado (ex: base com uma linha por matrícula
+    por mês), o df é agrupado por matrícula antes de gravar: os campos
+    estáticos (endereço, economias, situação) vêm da linha do período mais
+    recente, e o consumo é resumido em consumo médio, consumo do último mês
+    e quantidade de meses com consumo zero — sinais úteis para priorizar
+    quem parece ter parado de consumir.
+
+    `colunas_extra` são colunas adicionais do df guardadas como JSON junto
+    de cada matrícula (usa sempre o valor do período mais recente).
+    """
     conn = conectar()
     cur = conn.cursor()
     agora = datetime.now().isoformat(timespec="seconds")
-    for _, row in df.iterrows():
-        matricula = str(row.get("matricula", "")).strip()
-        if not matricula:
-            continue
-        extra = {c: row.get(c) for c in colunas_extra if c in df.columns}
+
+    df = df.copy()
+    df["matricula"] = df["matricula"].astype(str).str.strip()
+    df = df[df["matricula"] != ""]
+    if "consumo" in df.columns:
+        df["_consumo_num"] = df["consumo"].apply(_to_float)
+    else:
+        df["_consumo_num"] = pd.Series([None] * len(df), index=df.index)
+
+    if coluna_periodo and coluna_periodo in df.columns:
+        df["_periodo_chave"] = df[coluna_periodo].apply(_to_periodo_ordenavel)
+        grupos = df.sort_values("_periodo_chave").groupby("matricula", sort=False)
+    else:
+        df["_periodo_chave"] = None
+        grupos = df.groupby("matricula", sort=False)
+
+    for matricula, grupo in grupos:
+        ultima_linha = grupo.iloc[-1]
+        consumos = grupo["_consumo_num"].dropna()
+        consumo_medio = float(consumos.mean()) if len(consumos) else None
+        consumo_ultimo_mes = ultima_linha["_consumo_num"]
+        consumo_ultimo_mes = None if pd.isna(consumo_ultimo_mes) else float(consumo_ultimo_mes)
+        meses_consumo_zero = int((grupo["_consumo_num"] == 0).sum())
+        periodo_referencia = str(ultima_linha.get(coluna_periodo, "") or "") if coluna_periodo else None
+
+        extra = {c: ultima_linha.get(c) for c in colunas_extra if c in df.columns}
         extra_json = json.dumps(extra, default=str, ensure_ascii=False)
+
         cur.execute(
             """INSERT INTO cadastral
-               (matricula, endereco, consumo, qtd_economias, situacao_documental, dados_extra, atualizado_em)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+               (matricula, endereco, consumo_medio, consumo_ultimo_mes, meses_consumo_zero,
+                periodo_referencia, qtd_economias, situacao_documental, dados_extra, atualizado_em)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(matricula) DO UPDATE SET
                  endereco=excluded.endereco,
-                 consumo=excluded.consumo,
+                 consumo_medio=excluded.consumo_medio,
+                 consumo_ultimo_mes=excluded.consumo_ultimo_mes,
+                 meses_consumo_zero=excluded.meses_consumo_zero,
+                 periodo_referencia=excluded.periodo_referencia,
                  qtd_economias=excluded.qtd_economias,
                  situacao_documental=excluded.situacao_documental,
                  dados_extra=excluded.dados_extra,
                  atualizado_em=excluded.atualizado_em""",
             (
                 matricula,
-                str(row.get("endereco", "") or ""),
-                _to_float(row.get("consumo")),
-                _to_int(row.get("qtd_economias")),
-                str(row.get("situacao_documental", "") or ""),
+                str(ultima_linha.get("endereco", "") or ""),
+                consumo_medio,
+                consumo_ultimo_mes,
+                meses_consumo_zero,
+                periodo_referencia,
+                _to_int(ultima_linha.get("qtd_economias")),
+                str(ultima_linha.get("situacao_documental", "") or ""),
                 extra_json,
                 agora,
             ),
@@ -147,6 +193,20 @@ def atualizar_cadastral(df, colunas_extra):
     total = conn.execute("SELECT COUNT(*) AS n FROM cadastral").fetchone()["n"]
     conn.close()
     return total
+
+
+def _to_periodo_ordenavel(valor):
+    """Converte um período tipo 'MM/YYYY' ou 'YYYY-MM' em algo ordenável
+    (string 'YYYYMM'). Cai no valor original (como texto) se não reconhecer."""
+    texto = str(valor or "").strip()
+    partes = texto.replace("-", "/").split("/")
+    if len(partes) == 2:
+        a, b = partes
+        if len(a) == 4 and a.isdigit() and b.isdigit():
+            return f"{a}{int(b):02d}"
+        if len(b) == 4 and b.isdigit() and a.isdigit():
+            return f"{b}{int(a):02d}"
+    return texto
 
 
 def obter_regras():
@@ -182,7 +242,7 @@ def ultima_visita_por_matricula():
     conn = conectar()
     rows = conn.execute(
         """
-        SELECT v.matricula, v.status, v.data_visita, v.observacao
+        SELECT v.matricula, v.status, v.data_visita, v.motivo, v.observacao
         FROM visitas v
         INNER JOIN (
             SELECT matricula, MAX(data_visita) AS max_data

@@ -16,17 +16,29 @@ base é gerada contra esse histórico completo, não contra um único arquivo.
 
 ## Como funciona
 
-1. **Importar visitas (field)** — sobe o arquivo do field, mapeia as
-   colunas (matrícula, data, status, etc.) e acrescenta ao histórico.
-   Visitas repetidas (mesma matrícula + data + OS + status) são ignoradas
+1. **Importar visitas (field)** — sobe o arquivo do field. O app já
+   sugere automaticamente o mapeamento de colunas para exportações comuns
+   (ex: `Matrícula`, `Data`, `Status da Atividade`, `Motivo de Não
+   Execução`), mas qualquer coluna pode ser remapeada manualmente. Quando
+   existir uma coluna de motivo (ou duas, ex: "Cobrança" e "Normal"), o
+   motivo é combinado com o status para regras de resfriamento mais
+   precisas (ex: `Encerrada com Ocorrência - CLIENTE AUSENTE`). Visitas
+   repetidas (mesma matrícula + data + OS + status) são ignoradas
    automaticamente.
 2. **Atualizar base cadastral** — sobe a base cadastral atual (consumo,
    quantidade de economias, situação documental, e quaisquer outras
-   colunas de interesse, como potencial de incremento). Cada envio
-   atualiza os dados da matrícula.
+   colunas de interesse, como potencial de incremento). Se a base tiver
+   uma linha por matrícula **por mês** (histórico de consumo), mapeie
+   também a coluna de período — o app agrupa por matrícula e calcula
+   consumo médio, consumo do último mês e quantos meses tiveram consumo
+   zero (sinal forte de ligação ativa mas sem uso — possível oportunidade
+   ou irregularidade).
 3. **Regras de resfriamento** (barra lateral) — define, por status de
    visita, quantos dias uma matrícula fica fora de novas bases depois de
-   receber aquele status (ex: recusa = 90 dias, sem acesso = 30 dias).
+   receber aquele status. Os valores iniciais são um ponto de partida —
+   ajuste conforme os status/motivos reais da sua operação (aparecem na
+   base gerada como "sem regra configurada" até serem adicionados aqui,
+   e continuam incluídos, nunca somem por falta de regra).
 4. **Gerar base de alvos** — cruza a base cadastral com o histórico,
    aplicando as regras de resfriamento, e devolve só quem pode ser
    visitado agora — com o motivo da inclusão — pronta para baixar em
