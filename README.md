@@ -6,91 +6,107 @@ sucesso.
 
 ## Problema que resolve
 
-Hoje a geração de bases não tem memória entre execuções: cada nova base é
+A geração de bases não tinha memória entre execuções: cada nova base era
 filtrada só contra o arquivo do momento, então endereços já visitados (e
-sem resultado) voltam a aparecer, gerando reclamação dos colaboradores.
+sem resultado) voltavam a aparecer, gerando reclamação dos colaboradores.
 
-Esta ferramenta mantém um **histórico persistente de visitas** (banco
-SQLite local) que se acumula a cada arquivo do field importado. Toda nova
-base é gerada contra esse histórico completo, não contra um único arquivo.
+Este app lê as planilhas **direto do seu computador, no navegador** — sem
+subir nada pela internet — e mantém um histórico persistente local que se
+acumula a cada nova leitura da pasta. Toda base de alvos é gerada contra
+esse histórico completo, não contra um único arquivo.
 
 ## Como funciona
 
-1. **Importar arquivos** — uma única tela para subir tudo junto: os
-   arquivos do field e da base cadastral, de uma vez só (pode selecionar a
-   pasta inteira, misturando os dois tipos na mesma seleção). O app
-   identifica automaticamente, pelo **conteúdo** de cada arquivo (quais
-   colunas ele tem — não pelo nome do arquivo), se é um arquivo de visitas
-   do field ou da base cadastral, e organiza cada um no bloco de
-   importação certo, cada um com seu próprio mapeamento de colunas e botão:
-   - **Visitas do field**: sugere automaticamente o mapeamento de colunas
-     para exportações comuns (ex: `Matrícula`, `Data`, `Status da
-     Atividade`, `Motivo de Não Execução`), com base no primeiro arquivo
-     desse tipo, aplicado a todos; pode ser remapeado manualmente. Quando
-     existir uma coluna de motivo (ou duas, ex: "Cobrança" e "Normal"), o
-     motivo é combinado com o status para regras de resfriamento mais
-     precisas (ex: `Encerrada com Ocorrência - CLIENTE AUSENTE`). Visitas
-     repetidas (mesma matrícula + data + OS + status) são ignoradas
-     automaticamente, mesmo vindas de arquivos diferentes.
-   - **Base cadastral**: sugere o mapeamento (`NUM_LIGACAO`, `END_LIGACAO`,
-     `Mês/Ano`, `CON_MEDIDO`, etc.). Se a base tiver uma linha por
-     matrícula **por período** (histórico de consumo), mapeie também a
-     coluna de período — o app acumula os períodos de todos os arquivos já
-     importados (mesmo em envios separados ao longo do tempo, ex: um
-     arquivo por mês) e calcula consumo médio, consumo do período mais
-     recente e quantos períodos tiveram consumo zero (sinal forte de
-     ligação ativa mas sem uso — possível oportunidade ou irregularidade).
-   - **Memória de arquivos já importados**: cada arquivo é identificado
-     pelo nome + um hash do conteúdo. Selecionar a mesma pasta de novo
-     (ex: todos os arquivos do ano) pula automaticamente quem já foi
-     importado sem alteração — só o que é novo ou foi modificado é
-     reprocessado.
-   - **Proteção cruzada**: se algum arquivo tiver colunas ambíguas ou não
-     reconhecidas, ele aparece separado como "não identificado" e não é
-     processado; e mesmo dentro de um lote já classificado, um arquivo
-     cujas colunas mapeadas não batem é pulado com aviso, em vez de
-     importado com os dados em branco.
-2. **Regras de resfriamento** (barra lateral) — define, por status de
-   visita, quantos dias uma matrícula fica fora de novas bases depois de
-   receber aquele status. Os valores iniciais são um ponto de partida —
-   ajuste conforme os status/motivos reais da sua operação (aparecem na
-   base gerada como "sem regra configurada" até serem adicionados aqui,
-   e continuam incluídos, nunca somem por falta de regra).
-3. **Gerar base de alvos** — cruza a base cadastral com o histórico,
-   aplicando as regras de resfriamento, e devolve só quem pode ser
-   visitado agora — com o motivo da inclusão — pronta para baixar em
-   Excel.
-4. **Consultar histórico** — busca todas as visitas já registradas de uma
+1. **Conectar pasta** (primeira vez) — escolha a pasta que tem os arquivos
+   do field e da base cadastral (pode ter subpastas, ex: "Base Cadastral" e
+   "De Janeiro a Agosto" — o app lê tudo recursivamente). O navegador
+   guarda essa autorização.
+2. **Atualizar** (das próximas vezes em diante) — um clique relê a mesma
+   pasta. Arquivos que não mudaram desde a última vez são pulados
+   automaticamente (comparando tamanho e data de modificação) — só o que é
+   novo ou foi alterado é reprocessado. Sem upload: tudo acontece no seu
+   computador.
+3. **Classificação automática** — cada arquivo é identificado pelo
+   **conteúdo** (quais colunas ele tem), não pelo nome: arquivos do field
+   (`Matrícula`, `Status da Atividade`, `Motivo de Não Execução`) viram
+   visitas; arquivos da base cadastral (`NUM_LIGACAO`, `CON_MEDIDO`,
+   `Mês/Ano`) viram registros de consumo. Motivo de não execução (quando
+   houver mais de uma coluna, ex. "Cobrança" e "Normal") é combinado com o
+   status para regras de resfriamento mais precisas (ex: `Encerrada com
+   Ocorrência - CLIENTE AUSENTE`). Se a base cadastral tiver uma linha por
+   matrícula por período (histórico de consumo), o app acumula todos os
+   períodos já lidos e calcula consumo médio, consumo do período mais
+   recente e quantos períodos tiveram consumo zero — sinal de ligação
+   ativa mas sem uso.
+4. **Regras de resfriamento** — por quantos dias uma matrícula fica fora da
+   base de alvos depois de receber cada status na última visita. Status
+   sem regra configurada aparece incluído por padrão (nunca some
+   silenciosamente).
+5. **Base de alvos** — cruza a base cadastral com o histórico de visitas,
+   aplica as regras de resfriamento, e mostra só quem pode ser visitado
+   agora — ordenável por qualquer coluna, com exportação para Excel.
+6. **Consultar histórico** — todas as visitas já registradas de uma
    matrícula específica.
+7. **Auditoria** — lista todos os arquivos lidos, o tipo identificado e a
+   quantidade de linhas, para conferir se algo não foi reconhecido.
+
+## Requisitos
+
+Funciona melhor no **Chrome ou Edge** (desktop), que suportam a API do
+navegador usada para lembrar a pasta autorizada entre usos (File System
+Access API). Em outros navegadores (Firefox, Safari) o app ainda funciona,
+mas pede pra você reselecionar a pasta a cada visita, sem o atalho de
+"Atualizar" com um clique.
 
 ## Como rodar localmente
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
+npm install
+npm run dev
 ```
 
-A aplicação abre em `http://localhost:8501`. O histórico fica salvo em
-`data/historico.db` (SQLite), que **não é versionado no git** — precisa
-existir no mesmo lugar onde a aplicação roda para manter a memória entre
-usos.
+Abre em `http://localhost:3000`.
 
-## Observação sobre persistência
+## Como publicar
 
-Se esta aplicação for publicada em um servidor com disco efêmero (alguns
-serviços de deploy gratuitos apagam o disco a cada reinício), o arquivo
-`data/historico.db` pode ser perdido, junto com o histórico. Para uso
-contínuo, rodar localmente ou em um servidor/container com disco
-persistente.
+```bash
+npm run build
+```
+
+Gera um site 100% estático na pasta `out/` — sobe em qualquer host de
+arquivos estáticos (Cloudflare Workers/Pages, Vercel, Netlify, etc.). Não
+precisa de servidor Node.js em produção; nenhuma planilha passa por um
+backend.
+
+## Sobre onde o histórico fica salvo
+
+O histórico (visitas, consumo, regras) fica no **IndexedDB do navegador**,
+neste computador — não é enviado a lugar nenhum. Isso quer dizer:
+
+- Se você limpar os dados do navegador, ou usar outro computador, o
+  histórico local se perde — mas nada é perdido de verdade: como o app
+  sempre recalcula tudo a partir dos arquivos da pasta, basta reconectar a
+  mesma pasta (com todos os arquivos do field acumulados ao longo do
+  tempo, sem apagar os antigos) que o histórico completo é reconstruído.
+- Por isso é importante **manter os arquivos diários do field na pasta**
+  (não apagar os antigos depois de importados) — eles são a fonte de
+  verdade; o IndexedDB é só um cache local para não precisar reler tudo
+  toda vez.
+- Cada pessoa que abrir o app no próprio computador, apontando pra mesma
+  pasta (ex: a mesma pasta do OneDrive sincronizada), reconstrói o mesmo
+  histórico de forma independente — não há um banco compartilhado.
 
 ## Estrutura
 
 ```
-app.py           interface Streamlit
-config.py        configurações (caminho do banco, regras padrão)
-src/db.py        acesso ao banco SQLite (histórico + cadastral + regras)
-src/io_utils.py  leitura de arquivos Excel/CSV enviados
-src/matching.py  lógica de cruzamento e geração da base de alvos
+app/dashboard-client.tsx   interface principal (conectar pasta, abas, tabelas)
+app/page.tsx               carrega o leitor de Excel vendorizado
+lib/types.ts                tipos compartilhados
+lib/classify.ts              mapeamento de colunas e classificação do tipo de arquivo
+lib/parse.ts                  leitura de um arquivo (Excel/CSV) para linhas tipadas
+lib/matching.ts                combinação dos arquivos em cima do histórico + geração de alvos
+lib/idb.ts                     cache local (IndexedDB): arquivos já processados, regras
+lib/fs-access.ts                 leitura recursiva da pasta conectada (File System Access API)
+lib/export-xlsx.ts               exportação da base de alvos para Excel
+public/vendor/xlsx.full.min.js    leitor de Excel (SheetJS), vendorizado para não depender de CDN
 ```

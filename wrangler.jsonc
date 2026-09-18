@@ -1,0 +1,10 @@
+{
+  // Serve o export estático do Next.js (pasta ./out). O app não tem
+  // backend: toda leitura de planilha acontece no navegador, via File
+  // System Access API. Nenhuma linha das planilhas passa por aqui.
+  "name": "status-matriculas",
+  "compatibility_date": "2026-09-18",
+  "assets": {
+    "directory": "./out"
+  }
+}

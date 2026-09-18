@@ -1,7 +1,18 @@
-__pycache__/
-*.pyc
-.venv/
-venv/
-.streamlit/secrets.toml
-data/*.db
+# Next.js
+/.next/
+/out/
+
+# Node
+/node_modules/
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Gerados automaticamente por `next dev` (aponta pra docs locais em
+# node_modules) — não é conteúdo do projeto.
+/AGENTS.md
+/CLAUDE.md
+
 .DS_Store
