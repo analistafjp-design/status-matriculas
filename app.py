@@ -71,6 +71,52 @@ def caixa_mapeamento(colunas_disponiveis, campo, obrigatorio, aliases, key_prefi
     return st.selectbox(rotulo, opcoes, index=indice, key=f"{key_prefix}_{campo}")
 
 
+def separar_novos_e_repetidos(arquivos, tipo):
+    """Calcula o hash de cada arquivo e separa os que já foram importados
+    antes (mesmo nome + mesmo conteúdo, sem alteração) dos novos/modificados,
+    para não reprocessar o que já está no histórico."""
+    info = []
+    for arq in arquivos:
+        h = io_utils.calcular_hash(arq)
+        info.append(
+            {"arquivo": arq, "hash": h, "ja_processado": db.arquivo_ja_processado(tipo, arq.name, h)}
+        )
+    pendentes = [i for i in info if not i["ja_processado"]]
+    ja_ok = [i for i in info if i["ja_processado"]]
+    return pendentes, ja_ok
+
+
+def colunas_mapeadas_ausentes(df_bruto, mapeamento, campos_conhecidos):
+    """Confere se as colunas mapeadas (a partir do primeiro arquivo do lote)
+    para os campos conhecidos desta aba realmente existem neste arquivo
+    específico. Checa TODOS os campos conhecidos (não só os obrigatórios) —
+    por exemplo, "matricula" sozinho não bastaria para distinguir um
+    arquivo do field de um da base cadastral, já que ambos costumam ter uma
+    coluna chamada "Matrícula". Usado para detectar um arquivo do tipo
+    errado (ex: base cadastral enviada na aba do field) e pular com aviso,
+    em vez de importar tudo em branco silenciosamente."""
+    return [
+        campo
+        for campo in campos_conhecidos
+        if mapeamento.get(campo) not in (None, "(nenhuma)") and mapeamento[campo] not in df_bruto.columns
+    ]
+
+
+def escolher_arquivos_alvo(arquivos, tipo, chave_forcar):
+    """Mostra quais arquivos serão pulados (já importados sem alteração) e
+    devolve a lista dos que devem ser processados agora."""
+    pendentes, ja_ok = separar_novos_e_repetidos(arquivos, tipo)
+    if ja_ok:
+        nomes = ", ".join(i["arquivo"].name for i in ja_ok)
+        st.caption(f"⏭️ {len(ja_ok)} arquivo(s) sem alteração desde a última importação (pulados): {nomes}")
+    if pendentes:
+        return pendentes
+    st.info("Nenhum arquivo novo ou modificado nesta seleção.")
+    if st.checkbox("Reprocessar mesmo assim (todos os arquivos selecionados)", key=chave_forcar):
+        return [{"arquivo": a, "hash": io_utils.calcular_hash(a)} for a in arquivos]
+    return []
+
+
 aba_visitas, aba_cadastral, aba_gerar, aba_consulta = st.tabs(
     [
         "Importar visitas (field)",
@@ -120,6 +166,11 @@ def montar_df_visita(df_bruto, mapeamento):
 
 
 with aba_visitas:
+    if st.session_state.get("erros_field"):
+        st.error(
+            "Alguns arquivos tiveram erro e foram pulados:\n"
+            + "\n".join(st.session_state.pop("erros_field"))
+        )
     st.write(
         "Envie o(s) arquivo(s) exportado(s) do field — pode selecionar vários "
         "de uma vez (ex: um por dia). Cada linha é uma visita/OS. Visitas já "
@@ -132,59 +183,75 @@ with aba_visitas:
         accept_multiple_files=True,
     )
     if arquivos:
-        df_bruto = io_utils.ler_arquivo(arquivos[0])
-        st.dataframe(df_bruto.head(20), use_container_width=True)
-        if len(arquivos) > 1:
-            st.caption(
-                f"{len(arquivos)} arquivos selecionados. O mapeamento de colunas abaixo "
-                f"(baseado em **{arquivos[0].name}**) será aplicado a todos — assume que "
-                "têm a mesma estrutura de colunas."
-            )
+        arquivos_alvo = escolher_arquivos_alvo(arquivos, "field", "forcar_field")
 
-        st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
-        colunas_disponiveis = list(df_bruto.columns)
-        mapeamento = {}
-        campos = CAMPOS_VISITA_OBRIGATORIOS + CAMPOS_VISITA_OPCIONAIS
-        colunas_ui = st.columns(3)
-        for i, campo in enumerate(campos):
-            with colunas_ui[i % 3]:
-                obrigatorio = campo in CAMPOS_VISITA_OBRIGATORIOS
-                mapeamento[campo] = caixa_mapeamento(
-                    colunas_disponiveis, campo, obrigatorio, ALIASES_VISITA.get(campo, []), "map_visita"
+        if arquivos_alvo:
+            df_bruto = io_utils.ler_arquivo(arquivos_alvo[0]["arquivo"])
+            st.dataframe(df_bruto.head(20), use_container_width=True)
+            if len(arquivos_alvo) > 1:
+                st.caption(
+                    f"{len(arquivos_alvo)} arquivo(s) a processar. O mapeamento de colunas abaixo "
+                    f"(baseado em **{arquivos_alvo[0]['arquivo'].name}**) será aplicado a todos — assume "
+                    "que têm a mesma estrutura de colunas."
                 )
-        st.caption(
-            "`motivo` e `motivo_alt`: motivo de não execução, quando existir mais de uma coluna "
-            "(ex: 'Cobrança' e 'Normal'). Quando preenchido, é combinado com o status "
-            "(ex: 'Cancelada - CLIENTE AUSENTE') para permitir regras de resfriamento mais precisas."
-        )
 
-        faltando = [c for c in CAMPOS_VISITA_OBRIGATORIOS if mapeamento.get(c) in (None, "(nenhuma)")]
-        if faltando:
-            st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando)}")
-        elif st.button("Importar para o histórico", type="primary"):
-            barra = st.progress(0.0, text="Importando...")
-            total_novas = 0
-            total_duplicadas = 0
-            erros = []
-            for i, arq in enumerate(arquivos):
-                try:
-                    df_bruto_i = df_bruto if i == 0 else io_utils.ler_arquivo(arq)
-                    df_padrao = montar_df_visita(df_bruto_i, mapeamento)
-                    novas, duplicadas = db.importar_visitas(df_padrao, arq.name)
-                    total_novas += novas
-                    total_duplicadas += duplicadas
-                except Exception as e:
-                    erros.append(f"{arq.name}: {e}")
-                barra.progress((i + 1) / len(arquivos), text=f"Importando {i + 1}/{len(arquivos)}: {arq.name}")
-            barra.empty()
-            st.toast(
-                f"{total_novas} visita(s) nova(s) em {len(arquivos)} arquivo(s). "
-                f"{total_duplicadas} já existiam e foram ignoradas.",
-                icon="✅",
+            st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
+            colunas_disponiveis = list(df_bruto.columns)
+            mapeamento = {}
+            campos = CAMPOS_VISITA_OBRIGATORIOS + CAMPOS_VISITA_OPCIONAIS
+            colunas_ui = st.columns(3)
+            for i, campo in enumerate(campos):
+                with colunas_ui[i % 3]:
+                    obrigatorio = campo in CAMPOS_VISITA_OBRIGATORIOS
+                    mapeamento[campo] = caixa_mapeamento(
+                        colunas_disponiveis, campo, obrigatorio, ALIASES_VISITA.get(campo, []), "map_visita"
+                    )
+            st.caption(
+                "`motivo` e `motivo_alt`: motivo de não execução, quando existir mais de uma coluna "
+                "(ex: 'Cobrança' e 'Normal'). Quando preenchido, é combinado com o status "
+                "(ex: 'Cancelada - CLIENTE AUSENTE') para permitir regras de resfriamento mais precisas."
             )
-            if erros:
-                st.error("Alguns arquivos tiveram erro e foram pulados:\n" + "\n".join(erros))
-            st.rerun()
+
+            faltando = [c for c in CAMPOS_VISITA_OBRIGATORIOS if mapeamento.get(c) in (None, "(nenhuma)")]
+            if faltando:
+                st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando)}")
+            elif st.button("Importar para o histórico", type="primary"):
+                barra = st.progress(0.0, text="Importando...")
+                total_novas = 0
+                total_duplicadas = 0
+                arquivos_ok = 0
+                erros = []
+                for i, info in enumerate(arquivos_alvo):
+                    arq = info["arquivo"]
+                    try:
+                        df_bruto_i = df_bruto if i == 0 else io_utils.ler_arquivo(arq)
+                        ausentes = colunas_mapeadas_ausentes(
+                            df_bruto_i, mapeamento, CAMPOS_VISITA_OBRIGATORIOS + CAMPOS_VISITA_OPCIONAIS
+                        )
+                        if ausentes:
+                            erros.append(
+                                f"{arq.name}: pulado — não parece um arquivo do field "
+                                f"(colunas ausentes: {', '.join(mapeamento[c] for c in ausentes)})"
+                            )
+                        else:
+                            df_padrao = montar_df_visita(df_bruto_i, mapeamento)
+                            novas, duplicadas = db.importar_visitas(df_padrao, arq.name)
+                            db.registrar_arquivo_importado("field", arq.name, info["hash"], arq.size)
+                            total_novas += novas
+                            total_duplicadas += duplicadas
+                            arquivos_ok += 1
+                    except Exception as e:
+                        erros.append(f"{arq.name}: {e}")
+                    barra.progress((i + 1) / len(arquivos_alvo), text=f"Importando {i + 1}/{len(arquivos_alvo)}: {arq.name}")
+                barra.empty()
+                st.toast(
+                    f"{total_novas} visita(s) nova(s) em {arquivos_ok} arquivo(s) processado(s). "
+                    f"{total_duplicadas} já existiam e foram ignoradas.",
+                    icon="✅",
+                )
+                if erros:
+                    st.session_state["erros_field"] = erros
+                st.rerun()
 
 ALIASES_CADASTRAL = {
     "matricula": ["NUM_LIGACAO", "Matrícula", "matricula", "UC"],
@@ -214,6 +281,11 @@ def montar_df_cadastral(df_bruto, mapeamento_cad, colunas_extras_escolhidas, col
 
 
 with aba_cadastral:
+    if st.session_state.get("erros_cadastral"):
+        st.error(
+            "Alguns arquivos tiveram erro e foram pulados:\n"
+            + "\n".join(st.session_state.pop("erros_cadastral"))
+        )
     st.write(
         "Envie a base cadastral — pode selecionar vários arquivos de uma vez "
         "(ex: um por mês). Se a base tiver uma linha por matrícula por mês "
@@ -229,67 +301,85 @@ with aba_cadastral:
         accept_multiple_files=True,
     )
     if arquivos_cad:
-        df_cad_bruto = io_utils.ler_arquivo(arquivos_cad[0])
-        st.dataframe(df_cad_bruto.head(20), use_container_width=True)
-        if len(arquivos_cad) > 1:
-            st.caption(
-                f"{len(arquivos_cad)} arquivos selecionados. O mapeamento abaixo, baseado em "
-                f"**{arquivos_cad[0].name}** ({len(df_cad_bruto)} linha(s)), será aplicado a todos."
-            )
-        else:
-            st.caption(f"{len(df_cad_bruto)} linha(s) no arquivo enviado.")
+        arquivos_cad_alvo = escolher_arquivos_alvo(arquivos_cad, "cadastral", "forcar_cadastral")
 
-        st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
-        colunas_disponiveis_cad = list(df_cad_bruto.columns)
-        mapeamento_cad = {}
-        colunas_ui = st.columns(3)
-        for i, campo in enumerate(CAMPOS_CADASTRAL_CONHECIDOS):
-            with colunas_ui[i % 3]:
-                obrigatorio = campo in CAMPOS_CADASTRAL_OBRIGATORIOS
-                mapeamento_cad[campo] = caixa_mapeamento(
-                    colunas_disponiveis_cad, campo, obrigatorio, ALIASES_CADASTRAL.get(campo, []), "map_cad"
+        if arquivos_cad_alvo:
+            df_cad_bruto = io_utils.ler_arquivo(arquivos_cad_alvo[0]["arquivo"])
+            st.dataframe(df_cad_bruto.head(20), use_container_width=True)
+            if len(arquivos_cad_alvo) > 1:
+                st.caption(
+                    f"{len(arquivos_cad_alvo)} arquivo(s) a processar. O mapeamento abaixo, baseado em "
+                    f"**{arquivos_cad_alvo[0]['arquivo'].name}** ({len(df_cad_bruto)} linha(s)), será "
+                    "aplicado a todos."
                 )
-        st.caption(
-            "`periodo` é opcional: deixe '(nenhuma)' se sua base já tem uma linha por matrícula."
-        )
+            else:
+                st.caption(f"{len(df_cad_bruto)} linha(s) no arquivo enviado.")
 
-        colunas_mapeadas = {v for v in mapeamento_cad.values() if v != "(nenhuma)"}
-        colunas_extras_disponiveis = [c for c in df_cad_bruto.columns if c not in colunas_mapeadas]
-        colunas_extras_escolhidas = st.multiselect(
-            "Outras colunas para manter junto de cada matrícula (ex: potencial "
-            "de incremento, categoria do imóvel, outras oportunidades)",
-            colunas_extras_disponiveis,
-        )
-
-        faltando_cad = [c for c in CAMPOS_CADASTRAL_OBRIGATORIOS if mapeamento_cad.get(c) in (None, "(nenhuma)")]
-        if faltando_cad:
-            st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando_cad)}")
-        elif st.button("Atualizar base cadastral", type="primary"):
-            coluna_periodo = mapeamento_cad.get("periodo")
-            usa_periodo = bool(coluna_periodo and coluna_periodo != "(nenhuma)")
-
-            barra = st.progress(0.0, text="Processando...")
-            total = 0
-            erros = []
-            for i, arq in enumerate(arquivos_cad):
-                try:
-                    df_cad_bruto_i = df_cad_bruto if i == 0 else io_utils.ler_arquivo(arq)
-                    df_cad_padrao = montar_df_cadastral(
-                        df_cad_bruto_i, mapeamento_cad, colunas_extras_escolhidas, coluna_periodo, usa_periodo
+            st.write("Mapeie as colunas do arquivo para os campos abaixo (sugestão automática já aplicada):")
+            colunas_disponiveis_cad = list(df_cad_bruto.columns)
+            mapeamento_cad = {}
+            colunas_ui = st.columns(3)
+            for i, campo in enumerate(CAMPOS_CADASTRAL_CONHECIDOS):
+                with colunas_ui[i % 3]:
+                    obrigatorio = campo in CAMPOS_CADASTRAL_OBRIGATORIOS
+                    mapeamento_cad[campo] = caixa_mapeamento(
+                        colunas_disponiveis_cad, campo, obrigatorio, ALIASES_CADASTRAL.get(campo, []), "map_cad"
                     )
-                    total = db.atualizar_cadastral(
-                        df_cad_padrao,
-                        colunas_extras_escolhidas,
-                        coluna_periodo="_periodo" if usa_periodo else None,
+            st.caption(
+                "`periodo` é opcional: deixe '(nenhuma)' se sua base já tem uma linha por matrícula."
+            )
+
+            colunas_mapeadas = {v for v in mapeamento_cad.values() if v != "(nenhuma)"}
+            colunas_extras_disponiveis = [c for c in df_cad_bruto.columns if c not in colunas_mapeadas]
+            colunas_extras_escolhidas = st.multiselect(
+                "Outras colunas para manter junto de cada matrícula (ex: potencial "
+                "de incremento, categoria do imóvel, outras oportunidades)",
+                colunas_extras_disponiveis,
+            )
+
+            faltando_cad = [c for c in CAMPOS_CADASTRAL_OBRIGATORIOS if mapeamento_cad.get(c) in (None, "(nenhuma)")]
+            if faltando_cad:
+                st.warning(f"Campos obrigatórios sem coluna mapeada: {', '.join(faltando_cad)}")
+            elif st.button("Atualizar base cadastral", type="primary"):
+                coluna_periodo = mapeamento_cad.get("periodo")
+                usa_periodo = bool(coluna_periodo and coluna_periodo != "(nenhuma)")
+
+                barra = st.progress(0.0, text="Processando...")
+                total = 0
+                erros = []
+                for i, info in enumerate(arquivos_cad_alvo):
+                    arq = info["arquivo"]
+                    try:
+                        df_cad_bruto_i = df_cad_bruto if i == 0 else io_utils.ler_arquivo(arq)
+                        ausentes = colunas_mapeadas_ausentes(
+                            df_cad_bruto_i, mapeamento_cad, CAMPOS_CADASTRAL_CONHECIDOS
+                        )
+                        if ausentes:
+                            erros.append(
+                                f"{arq.name}: pulado — não parece um arquivo da base cadastral "
+                                f"(colunas ausentes: {', '.join(mapeamento_cad[c] for c in ausentes)})"
+                            )
+                        else:
+                            df_cad_padrao = montar_df_cadastral(
+                                df_cad_bruto_i, mapeamento_cad, colunas_extras_escolhidas, coluna_periodo, usa_periodo
+                            )
+                            total = db.atualizar_cadastral(
+                                df_cad_padrao,
+                                colunas_extras_escolhidas,
+                                coluna_periodo="_periodo" if usa_periodo else None,
+                            )
+                            db.registrar_arquivo_importado("cadastral", arq.name, info["hash"], arq.size)
+                    except Exception as e:
+                        erros.append(f"{arq.name}: {e}")
+                    barra.progress(
+                        (i + 1) / len(arquivos_cad_alvo),
+                        text=f"Processando {i + 1}/{len(arquivos_cad_alvo)}: {arq.name}",
                     )
-                except Exception as e:
-                    erros.append(f"{arq.name}: {e}")
-                barra.progress((i + 1) / len(arquivos_cad), text=f"Processando {i + 1}/{len(arquivos_cad)}: {arq.name}")
-            barra.empty()
-            st.toast(f"Base cadastral atualizada. {total} matrícula(s) no total.", icon="✅")
-            if erros:
-                st.error("Alguns arquivos tiveram erro e foram pulados:\n" + "\n".join(erros))
-            st.rerun()
+                barra.empty()
+                st.toast(f"Base cadastral atualizada. {total} matrícula(s) no total.", icon="✅")
+                if erros:
+                    st.session_state["erros_cadastral"] = erros
+                st.rerun()
 
 with aba_gerar:
     st.write(

@@ -56,6 +56,15 @@ def inicializar_banco():
             status TEXT PRIMARY KEY,
             dias INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS arquivos_importados (
+            tipo TEXT NOT NULL,
+            nome TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            tamanho INTEGER,
+            processado_em TEXT NOT NULL,
+            PRIMARY KEY (tipo, nome)
+        );
         """
     )
     ja_tem_regras = conn.execute("SELECT COUNT(*) AS n FROM regras_resfriamento").fetchone()["n"]
@@ -300,6 +309,43 @@ def obter_cadastral():
         LEFT JOIN agregado ON agregado.matricula = c.matricula
         LEFT JOIN ultimo ON ultimo.matricula = c.matricula
         """
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def arquivo_ja_processado(tipo, nome, hash_arquivo):
+    """Verifica se um arquivo (pelo nome, dentro de um tipo: 'field' ou
+    'cadastral') já foi importado antes com esse mesmo conteúdo (hash).
+    Se o nome já existe mas o hash é diferente, o arquivo foi modificado
+    e não conta como já processado."""
+    conn = conectar()
+    row = conn.execute(
+        "SELECT hash FROM arquivos_importados WHERE tipo = ? AND nome = ?",
+        (tipo, nome),
+    ).fetchone()
+    conn.close()
+    return row is not None and row["hash"] == hash_arquivo
+
+
+def registrar_arquivo_importado(tipo, nome, hash_arquivo, tamanho):
+    conn = conectar()
+    conn.execute(
+        """INSERT INTO arquivos_importados (tipo, nome, hash, tamanho, processado_em)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(tipo, nome) DO UPDATE SET
+             hash=excluded.hash, tamanho=excluded.tamanho, processado_em=excluded.processado_em""",
+        (tipo, nome, hash_arquivo, tamanho, datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_arquivos_importados(tipo):
+    conn = conectar()
+    rows = conn.execute(
+        "SELECT nome, tamanho, processado_em FROM arquivos_importados WHERE tipo = ? ORDER BY processado_em DESC",
+        (tipo,),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

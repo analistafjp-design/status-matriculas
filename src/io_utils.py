@@ -1,4 +1,15 @@
+import hashlib
+
 import pandas as pd
+
+
+def calcular_hash(arquivo):
+    """Calcula um hash do conteúdo do arquivo, usado para detectar se ele já
+    foi importado antes (mesmo nome + mesmo conteúdo) e pode ser pulado."""
+    arquivo.seek(0)
+    conteudo = arquivo.read()
+    arquivo.seek(0)
+    return hashlib.sha256(conteudo).hexdigest()
 
 
 def ler_arquivo(arquivo):

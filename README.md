@@ -37,17 +37,25 @@ base é gerada contra esse histórico completo, não contra um único arquivo.
    consumo do período mais recente e quantos períodos tiveram consumo
    zero (sinal forte de ligação ativa mas sem uso — possível oportunidade
    ou irregularidade).
-3. **Regras de resfriamento** (barra lateral) — define, por status de
+3. **Memória de arquivos já importados** — cada arquivo enviado (field ou
+   cadastral) é identificado pelo nome + um hash do conteúdo. Se você
+   selecionar a mesma pasta de novo (ex: todos os arquivos do ano), os que
+   já foram importados sem alteração são pulados automaticamente — só o
+   que é novo ou foi modificado é reprocessado. Também existe uma proteção
+   cruzada: um arquivo do tipo errado (ex: base cadastral enviada na aba
+   do field) é detectado pelas colunas ausentes e pulado com aviso, em vez
+   de importado com os dados em branco.
+4. **Regras de resfriamento** (barra lateral) — define, por status de
    visita, quantos dias uma matrícula fica fora de novas bases depois de
    receber aquele status. Os valores iniciais são um ponto de partida —
    ajuste conforme os status/motivos reais da sua operação (aparecem na
    base gerada como "sem regra configurada" até serem adicionados aqui,
    e continuam incluídos, nunca somem por falta de regra).
-4. **Gerar base de alvos** — cruza a base cadastral com o histórico,
+5. **Gerar base de alvos** — cruza a base cadastral com o histórico,
    aplicando as regras de resfriamento, e devolve só quem pode ser
    visitado agora — com o motivo da inclusão — pronta para baixar em
    Excel.
-5. **Consultar histórico** — busca todas as visitas já registradas de uma
+6. **Consultar histórico** — busca todas as visitas já registradas de uma
    matrícula específica.
 
 ## Como rodar localmente
