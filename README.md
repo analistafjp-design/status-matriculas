@@ -16,46 +16,51 @@ base é gerada contra esse histórico completo, não contra um único arquivo.
 
 ## Como funciona
 
-1. **Importar visitas (field)** — sobe um ou vários arquivos do field de
-   uma vez (ex: um por dia — selecione todos juntos no seletor de
-   arquivos). O app já sugere automaticamente o mapeamento de colunas para
-   exportações comuns (ex: `Matrícula`, `Data`, `Status da Atividade`,
-   `Motivo de Não Execução`), com base no primeiro arquivo, aplicado a
-   todos; pode ser remapeado manualmente. Quando existir uma coluna de
-   motivo (ou duas, ex: "Cobrança" e "Normal"), o motivo é combinado com o
-   status para regras de resfriamento mais precisas (ex: `Encerrada com
-   Ocorrência - CLIENTE AUSENTE`). Visitas repetidas (mesma matrícula +
-   data + OS + status) são ignoradas automaticamente, mesmo vindas de
-   arquivos diferentes.
-2. **Atualizar base cadastral** — sobe um ou vários arquivos da base
-   cadastral (consumo, quantidade de economias, situação documental, e
-   quaisquer outras colunas de interesse, como potencial de incremento).
-   Se a base tiver uma linha por matrícula **por período** (histórico de
-   consumo), mapeie também a coluna de período — o app acumula os
-   períodos de todos os arquivos já importados (mesmo em envios separados
-   ao longo do tempo, ex: um arquivo por mês) e calcula consumo médio,
-   consumo do período mais recente e quantos períodos tiveram consumo
-   zero (sinal forte de ligação ativa mas sem uso — possível oportunidade
-   ou irregularidade).
-3. **Memória de arquivos já importados** — cada arquivo enviado (field ou
-   cadastral) é identificado pelo nome + um hash do conteúdo. Se você
-   selecionar a mesma pasta de novo (ex: todos os arquivos do ano), os que
-   já foram importados sem alteração são pulados automaticamente — só o
-   que é novo ou foi modificado é reprocessado. Também existe uma proteção
-   cruzada: um arquivo do tipo errado (ex: base cadastral enviada na aba
-   do field) é detectado pelas colunas ausentes e pulado com aviso, em vez
-   de importado com os dados em branco.
-4. **Regras de resfriamento** (barra lateral) — define, por status de
+1. **Importar arquivos** — uma única tela para subir tudo junto: os
+   arquivos do field e da base cadastral, de uma vez só (pode selecionar a
+   pasta inteira, misturando os dois tipos na mesma seleção). O app
+   identifica automaticamente, pelo **conteúdo** de cada arquivo (quais
+   colunas ele tem — não pelo nome do arquivo), se é um arquivo de visitas
+   do field ou da base cadastral, e organiza cada um no bloco de
+   importação certo, cada um com seu próprio mapeamento de colunas e botão:
+   - **Visitas do field**: sugere automaticamente o mapeamento de colunas
+     para exportações comuns (ex: `Matrícula`, `Data`, `Status da
+     Atividade`, `Motivo de Não Execução`), com base no primeiro arquivo
+     desse tipo, aplicado a todos; pode ser remapeado manualmente. Quando
+     existir uma coluna de motivo (ou duas, ex: "Cobrança" e "Normal"), o
+     motivo é combinado com o status para regras de resfriamento mais
+     precisas (ex: `Encerrada com Ocorrência - CLIENTE AUSENTE`). Visitas
+     repetidas (mesma matrícula + data + OS + status) são ignoradas
+     automaticamente, mesmo vindas de arquivos diferentes.
+   - **Base cadastral**: sugere o mapeamento (`NUM_LIGACAO`, `END_LIGACAO`,
+     `Mês/Ano`, `CON_MEDIDO`, etc.). Se a base tiver uma linha por
+     matrícula **por período** (histórico de consumo), mapeie também a
+     coluna de período — o app acumula os períodos de todos os arquivos já
+     importados (mesmo em envios separados ao longo do tempo, ex: um
+     arquivo por mês) e calcula consumo médio, consumo do período mais
+     recente e quantos períodos tiveram consumo zero (sinal forte de
+     ligação ativa mas sem uso — possível oportunidade ou irregularidade).
+   - **Memória de arquivos já importados**: cada arquivo é identificado
+     pelo nome + um hash do conteúdo. Selecionar a mesma pasta de novo
+     (ex: todos os arquivos do ano) pula automaticamente quem já foi
+     importado sem alteração — só o que é novo ou foi modificado é
+     reprocessado.
+   - **Proteção cruzada**: se algum arquivo tiver colunas ambíguas ou não
+     reconhecidas, ele aparece separado como "não identificado" e não é
+     processado; e mesmo dentro de um lote já classificado, um arquivo
+     cujas colunas mapeadas não batem é pulado com aviso, em vez de
+     importado com os dados em branco.
+2. **Regras de resfriamento** (barra lateral) — define, por status de
    visita, quantos dias uma matrícula fica fora de novas bases depois de
    receber aquele status. Os valores iniciais são um ponto de partida —
    ajuste conforme os status/motivos reais da sua operação (aparecem na
    base gerada como "sem regra configurada" até serem adicionados aqui,
    e continuam incluídos, nunca somem por falta de regra).
-5. **Gerar base de alvos** — cruza a base cadastral com o histórico,
+3. **Gerar base de alvos** — cruza a base cadastral com o histórico,
    aplicando as regras de resfriamento, e devolve só quem pode ser
    visitado agora — com o motivo da inclusão — pronta para baixar em
    Excel.
-6. **Consultar histórico** — busca todas as visitas já registradas de uma
+4. **Consultar histórico** — busca todas as visitas já registradas de uma
    matrícula específica.
 
 ## Como rodar localmente
