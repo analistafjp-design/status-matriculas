@@ -25,6 +25,7 @@ export const ALIASES_CADASTRAL: Record<string, string[]> = {
   endereco: ["END_LIGACAO", "Endereço", "endereco"],
   cidade: ["CIDADE", "Cidade", "cidade"],
   bairro: ["NOM_BAIRRO", "Bairro", "bairro"],
+  categoria: ["SUB_CATEGORIA", "categoria"],
   periodo: ["Mês/Ano", "Mes/Ano", "periodo", "mes_ano"],
   consumo: ["CON_MEDIDO", "CON_FAT_AGUA", "consumo"],
   qtdEconomias: ["TOTAL_ECO", "Numero De Economias", "Quantidade De Economia", "qtd_economias"],

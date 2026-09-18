@@ -72,8 +72,20 @@ esse histórico completo, não contra um único arquivo.
    Cadastro e Crescimento Vegetativo. Isso só funciona no site publicado
    (ver "IA para interpretar o Parecer de Campo" abaixo); no `next dev`
    local o botão aparece mas a chamada falha, porque não tem Worker rodando.
-9. **Auditoria** — lista todos os arquivos lidos, o tipo identificado e a
-   quantidade de linhas, para conferir se algo não foi reconhecido.
+9. **Consumo Social/Comércio** — cruza a categoria cadastral (`SUB_CATEGORIA`)
+   com o histórico de consumo mensal pra achar quem estourou o limite da
+   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. Três
+   listas, cada uma com cidade/bairro e botão de Excel:
+   - **Estouraram 3 meses seguidos** — consumo acima do limite nos 3
+     últimos períodos lidos da base cadastral.
+   - **No radar (2 dos últimos 3 meses)** — ainda não confirmado, mas já
+     merece acompanhamento — um mapeamento do que pode virar caso.
+   - **Social com mais de 1 economia** — categoria Social com mais de uma
+     economia na mesma matrícula, excluindo conjuntos habitacionais
+     (reconhecidos pelo endereço: "CONJ.HABIT.", "BNH", "COHAB" etc — esses
+     legitimamente têm muitas economias e não são a anomalia que interessa).
+10. **Auditoria** — lista todos os arquivos lidos, o tipo identificado e a
+    quantidade de linhas, para conferir se algo não foi reconhecido.
 
 ## Requisitos
 
@@ -82,6 +94,10 @@ navegador usada para lembrar a pasta autorizada entre usos (File System
 Access API). Em outros navegadores (Firefox, Safari) o app ainda funciona,
 mas pede pra você reselecionar a pasta a cada visita, sem o atalho de
 "Atualizar" com um clique.
+
+A interface é responsiva — funciona em desktop, tablet e celular (abas com
+rolagem horizontal, tabelas com rolagem própria, filtros empilhados em
+telas estreitas).
 
 ## Como rodar localmente
 
@@ -151,6 +167,7 @@ lib/classify.ts              mapeamento de colunas e classificação do tipo de 
 lib/parse.ts                  leitura de um arquivo (Excel/CSV) para linhas tipadas
 lib/matching.ts                combinação dos arquivos em cima do histórico + geração de alvos
 lib/oportunidades.ts           heurísticas das 3 categorias da aba "Oportunidades"
+lib/consumo-social.ts          limites por categoria e heurística de conjunto habitacional (aba "Consumo Social/Comércio")
 lib/buscar-matriculas.ts       extrai matrículas de texto colado ou de um arquivo enviado
 lib/ai.ts                      chamada ao Worker pra interpretar o Parecer de Campo com IA
 lib/idb.ts                     cache local (IndexedDB): arquivos já processados, regras

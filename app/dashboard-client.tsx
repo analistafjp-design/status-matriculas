@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type {
   AlvoRow,
   CachedFileData,
+  CadastroConsolidado,
   InterpretacaoIA,
   LocalDirectoryHandle,
   RegraResfriamento,
@@ -21,7 +22,7 @@ import {
 } from "../lib/idb";
 import { parseSelectedFile } from "../lib/parse";
 import { combinarArquivos, gerarAlvos, type EstadoDerivado } from "../lib/matching";
-import { exportarAlvosExcel } from "../lib/export-xlsx";
+import { exportarAlvosExcel, exportarExcel, type ColunaExport } from "../lib/export-xlsx";
 import { interpretarParecer } from "../lib/ai";
 import { extrairMatriculasDeArquivo, extrairMatriculasDeTexto } from "../lib/buscar-matriculas";
 import {
@@ -30,6 +31,7 @@ import {
   calcularPossivelLigacaoNova,
   statusEhIrrelevante,
 } from "../lib/oportunidades";
+import { calcularEstourosConsumo, calcularSocialMultiEconomia, type EstouroConsumo } from "../lib/consumo-social";
 
 const ESTADO_VAZIO: EstadoDerivado = {
   ultimaVisitaPorMatricula: new Map(),
@@ -38,7 +40,7 @@ const ESTADO_VAZIO: EstadoDerivado = {
   totalVisitas: 0,
 };
 
-type Aba = "alvos" | "regiao" | "oportunidades" | "buscar" | "auditoria" | "regras";
+type Aba = "alvos" | "regiao" | "oportunidades" | "consumo" | "buscar" | "auditoria" | "regras";
 
 type ResultadoBusca = {
   matricula: string;
@@ -61,17 +63,26 @@ const COLUNAS_ALVO: { chave: keyof AlvoRow; titulo: string }[] = [
   { chave: "motivoInclusao", titulo: "Motivo da inclusão" },
 ];
 
-const cardStyle: React.CSSProperties = { background: "#fff", border: "1px solid var(--borda)", borderRadius: 10, padding: 16 };
-const subtitleStyle: React.CSSProperties = { marginTop: 0, fontSize: 13, color: "var(--texto-suave)" };
-const primaryBtn: React.CSSProperties = {
-  background: "var(--azul)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  padding: "8px 14px",
-  fontWeight: 600,
-  fontSize: 13,
-};
+const COLUNAS_ESTOURO: ColunaExport<EstouroConsumo>[] = [
+  { chave: "matricula", titulo: "Matrícula" },
+  { chave: "endereco", titulo: "Endereço" },
+  { chave: "cidade", titulo: "Cidade" },
+  { chave: "bairro", titulo: "Bairro" },
+  { chave: "categoriaRotulo", titulo: "Categoria" },
+  { chave: "limite", titulo: "Limite (m³)" },
+  { chave: "mesesEstourados", titulo: "Meses estourados" },
+  { chave: "ultimosPeriodos", titulo: "Últimos períodos" },
+  { chave: "qtdEconomias", titulo: "Qtd. economias" },
+];
+
+const COLUNAS_SOCIAL_MULTI: ColunaExport<CadastroConsolidado>[] = [
+  { chave: "matricula", titulo: "Matrícula" },
+  { chave: "endereco", titulo: "Endereço" },
+  { chave: "cidade", titulo: "Cidade" },
+  { chave: "bairro", titulo: "Bairro" },
+  { chave: "qtdEconomias", titulo: "Qtd. economias" },
+  { chave: "situacaoDocumental", titulo: "Situação documental" },
+];
 
 export default function DashboardClient() {
   const [files, setFiles] = useState<CachedFileData[]>([]);
@@ -288,6 +299,10 @@ export default function DashboardClient() {
   const cadastralPendente = useMemo(() => calcularCadastralPendente(alvosRelevantes), [alvosRelevantes]);
   const possivelLigacaoNova = useMemo(() => calcularPossivelLigacaoNova(alvosRelevantes), [alvosRelevantes]);
 
+  const cadastroCompleto = useMemo(() => [...estado.cadastroConsolidado.values()], [estado]);
+  const estourosConsumo = useMemo(() => calcularEstourosConsumo(cadastroCompleto), [cadastroCompleto]);
+  const socialMultiEconomia = useMemo(() => calcularSocialMultiEconomia(cadastroCompleto), [cadastroCompleto]);
+
   const arquivosDesconhecidos = files.filter((f) => f.tipo === "desconhecido");
   const arquivosField = files.filter((f) => f.tipo === "field");
   const arquivosCadastral = files.filter((f) => f.tipo === "cadastral");
@@ -378,7 +393,7 @@ export default function DashboardClient() {
   }
 
   return (
-    <main style={{ minHeight: "100vh" }}>
+    <main className="page">
       <input
         ref={inputRef}
         type="file"
@@ -396,67 +411,46 @@ export default function DashboardClient() {
         {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
       />
 
-      <header
-        style={{
-          background: "linear-gradient(90deg,#071F38,#0B3B66,#0D4B73)",
-          color: "#fff",
-          padding: "20px 24px",
-        }}
-      >
-        <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", justifyContent: "space-between" }}>
+      <header className="app-header">
+        <div className="header-row">
           <div>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Gestão de Alvos de Campo</h1>
-            <p style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>
+            <h1>Gestão de Alvos de Campo</h1>
+            <p className="subtitle">
               Cruza visitas do field com a base cadastral — sem repetir quem já foi visitado sem sucesso.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              onClick={() => atualizar(false)}
-              disabled={loading}
-              style={{
-                background: "#fff",
-                color: "#0B3B66",
-                border: "none",
-                borderRadius: 8,
-                padding: "10px 18px",
-                fontWeight: 600,
-                opacity: loading ? 0.6 : 1,
-              }}
-            >
+          <div className="header-actions">
+            <button onClick={() => atualizar(false)} disabled={loading} className="btn btn-light">
               {pastaConectada || files.length ? "Atualizar" : "Conectar pasta"}
             </button>
             {(pastaConectada || files.length > 0) && (
-              <button
-                onClick={() => atualizar(true)}
-                disabled={loading}
-                style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,.5)", borderRadius: 8, padding: "10px 14px" }}
-              >
+              <button onClick={() => atualizar(true)} disabled={loading} className="btn btn-outline">
                 Trocar pasta
               </button>
             )}
           </div>
         </div>
-        <div style={{ maxWidth: 1400, margin: "10px auto 0", fontSize: 13, opacity: 0.9 }}>
+        <div className="status-line">
           {progress ? `Processando ${progress.atual}/${progress.total} · ${progress.nomeArquivo}` : status}
           {rootName ? ` · pasta: ${rootName}` : ""}
         </div>
       </header>
 
       {!suportaFsAccess && (
-        <div style={{ background: "#FEF6E7", color: "var(--amarelo)", padding: "10px 24px", fontSize: 13 }}>
+        <div className="banner-warning">
           Seu navegador não guarda a autorização da pasta entre visitas (isso funciona melhor no Chrome ou Edge). Você
           ainda pode usar o app, só vai precisar reselecionar a pasta a cada visita.
         </div>
       )}
 
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "16px 24px" }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      <div className="container" style={{ paddingTop: 16 }}>
+        <div className="tabbar">
           {(
             [
               ["alvos", `Base de alvos (${alvosFiltrados.length})`],
               ["regiao", "Por região"],
               ["oportunidades", "Oportunidades"],
+              ["consumo", `Consumo Social/Comércio (${estourosConsumo.tresMeses.length + estourosConsumo.doisMeses.length})`],
               ["buscar", "Buscar matrícula(s)"],
               ["regras", `Regras de resfriamento (${regras.length})`],
               ["auditoria", `Auditoria (${files.length} arquivos)`],
@@ -465,45 +459,37 @@ export default function DashboardClient() {
             <button
               key={chave}
               onClick={() => setAba(chave as Aba)}
-              style={{
-                padding: "8px 14px",
-                borderRadius: 8,
-                border: "1px solid var(--borda)",
-                background: aba === chave ? "var(--azul)" : "#fff",
-                color: aba === chave ? "#fff" : "var(--texto)",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
+              className={`tab-btn ${aba === chave ? "active" : ""}`}
             >
               {titulo}
             </button>
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="kpi-row">
           <Kpi titulo="Visitas no histórico" valor={estado.totalVisitas} />
           <Kpi titulo="Matrículas na base cadastral" valor={estado.cadastroConsolidado.size} />
           <Kpi titulo="Disponíveis como alvo agora" valor={alvosRelevantes.length} />
         </div>
 
         {aba === "alvos" && (
-          <section style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-              <p style={{ margin: 0, fontSize: 13, color: "var(--texto-suave)" }}>
+          <section className="card">
+            <div className="toolbar">
+              <p className="card-subtitle" style={{ marginBottom: 0 }}>
                 Clique numa coluna para ordenar. Exclui quem está dentro da janela de resfriamento configurada em
                 &quot;Regras de resfriamento&quot;.
               </p>
               <button
                 onClick={() => exportarAlvosExcel(alvosOrdenados)}
                 disabled={!alvosOrdenados.length}
-                style={{ background: "var(--verde)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 600 }}
+                className="btn btn-success"
               >
                 Baixar Excel
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+            <div className="filters-row">
+              <label className="checkbox-field">
                 <input
                   type="checkbox"
                   checked={ocultarIrrelevantes}
@@ -524,10 +510,7 @@ export default function DashboardClient() {
                 ))}
               </select>
               {(filtroCidade || filtroBairro) && (
-                <button
-                  onClick={() => { setFiltroCidade(""); setFiltroBairro(""); }}
-                  style={{ background: "none", border: "1px solid var(--borda)", borderRadius: 8, padding: "6px 10px", fontSize: 12 }}
-                >
+                <button onClick={() => { setFiltroCidade(""); setFiltroBairro(""); }} className="btn btn-light btn-sm">
                   Limpar filtro
                 </button>
               )}
@@ -538,7 +521,7 @@ export default function DashboardClient() {
             ) : alvosOrdenados.length === 0 ? (
               <Vazio texto="Nenhum alvo com os filtros atuais." />
             ) : (
-              <div style={{ overflowX: "auto", maxHeight: 600 }}>
+              <div className="table-scroll">
                 <table>
                   <thead>
                     <tr>
@@ -565,15 +548,15 @@ export default function DashboardClient() {
         )}
 
         {aba === "regiao" && (
-          <section style={cardStyle}>
-            <p style={subtitleStyle}>
+          <section className="card">
+            <p className="card-subtitle">
               Quantidade de alvos disponíveis agora por cidade e bairro (já considerando o filtro de status
               irrelevantes acima). Clique numa linha para ver esses alvos na Base de alvos.
             </p>
             {regiaoResumo.length === 0 ? (
               <Vazio texto="Nenhum alvo disponível para agrupar por região." />
             ) : (
-              <div style={{ overflowX: "auto", maxHeight: 600 }}>
+              <div className="table-scroll">
                 <table>
                   <thead>
                     <tr>
@@ -594,7 +577,7 @@ export default function DashboardClient() {
                         <td>
                           <button
                             onClick={() => { setFiltroCidade(r.cidade); setFiltroBairro(r.bairro); setAba("alvos"); }}
-                            style={{ background: "var(--azul-claro)", color: "var(--azul)", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12 }}
+                            className="btn btn-soft btn-sm"
                           >
                             Ver na base de alvos
                           </button>
@@ -609,10 +592,10 @@ export default function DashboardClient() {
         )}
 
         {aba === "oportunidades" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <section style={cardStyle}>
-              <h3 style={{ marginTop: 0 }}>Possível incremento de economias</h3>
-              <p style={subtitleStyle}>
+          <div className="card-stack">
+            <section className="card">
+              <h3>Possível incremento de economias</h3>
+              <p className="card-subtitle">
                 Consumo por economia bem acima da média entre os alvos disponíveis — pode indicar mais unidades
                 habitadas no imóvel do que o número de economias cadastrado.
               </p>
@@ -622,9 +605,9 @@ export default function DashboardClient() {
                 onInvestigar={investigarMatricula}
               />
             </section>
-            <section style={cardStyle}>
-              <h3 style={{ marginTop: 0 }}>Atualização cadastral pendente</h3>
-              <p style={subtitleStyle}>
+            <section className="card">
+              <h3>Atualização cadastral pendente</h3>
+              <p className="card-subtitle">
                 Situação documental vazia, pendente, irregular, em análise, suspensa ou cancelada.
               </p>
               <TabelaOportunidade
@@ -633,9 +616,9 @@ export default function DashboardClient() {
                 onInvestigar={investigarMatricula}
               />
             </section>
-            <section style={cardStyle}>
-              <h3 style={{ marginTop: 0 }}>Possível ligação nova / regularização</h3>
-              <p style={subtitleStyle}>
+            <section className="card">
+              <h3>Possível ligação nova / regularização</h3>
+              <p className="card-subtitle">
                 O texto do Parecer de Campo da última visita menciona algo como ligação clandestina, imóvel sem
                 ligação, obra ou construção nova. É uma busca por palavras-chave — confirme com &quot;Interpretar
                 com IA&quot; na aba Buscar matrícula(s).
@@ -649,14 +632,49 @@ export default function DashboardClient() {
           </div>
         )}
 
+        {aba === "consumo" && (
+          <div className="card-stack">
+            <div className="info-banner">
+              Limites considerados: <strong>Social até 15m³</strong> e <strong>Pequeno Comércio até 10m³</strong> por
+              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. A janela é sempre os
+              últimos períodos de consumo já lidos da base cadastral (não um calendário fixo) — por isso matrículas
+              com menos de 2 períodos de histórico não entram nessa análise.
+            </div>
+            <TabelaComExport
+              titulo="Estouraram consumo por 3 meses seguidos"
+              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 últimos períodos lidos."
+              itens={estourosConsumo.tresMeses}
+              colunas={COLUNAS_ESTOURO}
+              nomeArquivo="estouro_consumo_3_meses.xlsx"
+              nomeAba="estouro_3_meses"
+            />
+            <TabelaComExport
+              titulo="No radar: estouraram 2 dos últimos 3 meses"
+              descricao="Ainda não são 3 meses seguidos, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado."
+              itens={estourosConsumo.doisMeses}
+              colunas={COLUNAS_ESTOURO}
+              nomeArquivo="estouro_consumo_radar_2_meses.xlsx"
+              nomeAba="radar_2_meses"
+            />
+            <TabelaComExport
+              titulo="Social com mais de 1 economia"
+              descricao="Categoria Social com mais de uma economia cadastrada na mesma matrícula, excluindo conjuntos habitacionais (identificados pelo endereço: CONJ.HABIT., BNH, COHAB etc)."
+              itens={socialMultiEconomia}
+              colunas={COLUNAS_SOCIAL_MULTI}
+              nomeArquivo="social_multi_economia.xlsx"
+              nomeAba="social_multi_economia"
+            />
+          </div>
+        )}
+
         {aba === "buscar" && (
-          <section style={cardStyle}>
-            <p style={subtitleStyle}>
+          <section className="card">
+            <p className="card-subtitle">
               Cole uma ou mais matrículas (uma por linha) ou envie um arquivo, e veja se já foram visitadas, o tipo
               de atividade, status, data e o que o técnico escreveu no Parecer de Campo — com interpretação por IA
               opcional, focada em oportunidades para Cadastro e Crescimento Vegetativo.
             </p>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 12 }}>
+            <div className="search-row">
               <textarea
                 value={buscaTexto}
                 onChange={(e) => setBuscaTexto(e.target.value)}
@@ -664,11 +682,11 @@ export default function DashboardClient() {
                 rows={4}
                 style={{ width: 280, fontFamily: "inherit", fontSize: 13 }}
               />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button onClick={handleBuscarTexto} disabled={!buscaTexto.trim()} style={primaryBtn}>
+              <div className="field-stack">
+                <button onClick={handleBuscarTexto} disabled={!buscaTexto.trim()} className="btn btn-primary">
                   Buscar
                 </button>
-                <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>
+                <label className="field-hint">
                   ...ou envie um arquivo (.xlsx/.xls/.csv) com uma coluna de matrícula
                   <input
                     type="file"
@@ -686,7 +704,7 @@ export default function DashboardClient() {
             {buscaCarregando && <p style={{ fontSize: 13 }}>Lendo arquivo...</p>}
             {buscaErro && <p style={{ fontSize: 13, color: "var(--vermelho)" }}>{buscaErro}</p>}
             {buscaResultados && buscaResultados.length > 0 && (
-              <div style={{ overflowX: "auto" }}>
+              <div className="table-scroll">
                 <table>
                   <thead>
                     <tr>
@@ -712,7 +730,7 @@ export default function DashboardClient() {
                           <td>
                             <button
                               onClick={() => setMatriculaExpandida(matriculaExpandida === r.matricula ? null : r.matricula)}
-                              style={{ background: "var(--azul-claro)", color: "var(--azul)", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12 }}
+                              className="btn btn-soft btn-sm"
                             >
                               {matriculaExpandida === r.matricula ? "Fechar" : "Ver detalhes"}
                             </button>
@@ -720,7 +738,7 @@ export default function DashboardClient() {
                         </tr>
                         {matriculaExpandida === r.matricula && (
                           <tr>
-                            <td colSpan={7} style={{ background: "#F8FAFC", padding: 16 }}>
+                            <td colSpan={7} className="detail-panel">
                               <DetalheMatricula
                                 resultado={r}
                                 interpretacoes={interpretacoes}
@@ -742,81 +760,82 @@ export default function DashboardClient() {
         )}
 
         {aba === "regras" && (
-          <section style={cardStyle}>
-            <p style={subtitleStyle}>
+          <section className="card">
+            <p className="card-subtitle">
               Por quantos dias uma matrícula fica fora da base de alvos depois de receber cada status na última
               visita. Status sem regra aqui aparece incluído por padrão (nunca some silenciosamente).
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Dias</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {regras.map((r, i) => (
-                  <tr key={i}>
-                    <td>
-                      <input
-                        value={r.status}
-                        onChange={(e) => atualizarRegra(i, "status", e.target.value)}
-                        style={{ width: 380 }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        value={r.dias}
-                        onChange={(e) => atualizarRegra(i, "dias", e.target.value)}
-                        style={{ width: 80 }}
-                      />
-                    </td>
-                    <td>
-                      <button onClick={() => removerRegra(i)} style={{ background: "none", border: "none", color: "var(--vermelho)" }}>
-                        remover
-                      </button>
-                    </td>
+            <div className="table-scroll short">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Dias</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <button
-              onClick={adicionarRegra}
-              style={{ marginTop: 10, background: "var(--azul-claro)", color: "var(--azul)", border: "none", borderRadius: 8, padding: "8px 14px" }}
-            >
+                </thead>
+                <tbody>
+                  {regras.map((r, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input
+                          value={r.status}
+                          onChange={(e) => atualizarRegra(i, "status", e.target.value)}
+                          style={{ width: 320, maxWidth: "60vw" }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          value={r.dias}
+                          onChange={(e) => atualizarRegra(i, "dias", e.target.value)}
+                          style={{ width: 80 }}
+                        />
+                      </td>
+                      <td>
+                        <button onClick={() => removerRegra(i)} className="btn-link-danger">
+                          remover
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={adicionarRegra} className="btn btn-soft" style={{ marginTop: 12 }}>
               + adicionar regra
             </button>
           </section>
         )}
 
         {aba === "auditoria" && (
-          <section style={cardStyle}>
-            <p style={subtitleStyle}>
+          <section className="card">
+            <p className="card-subtitle">
               {arquivosField.length} arquivo(s) do field · {arquivosCadastral.length} da base cadastral
               {arquivosDesconhecidos.length ? ` · ${arquivosDesconhecidos.length} não reconhecido(s)` : ""}
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Arquivo</th>
-                  <th>Tipo</th>
-                  <th>Linhas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map((f) => (
-                  <tr key={f.path}>
-                    <td>{f.path}</td>
-                    <td>
-                      {f.tipo === "field" ? "Field" : f.tipo === "cadastral" ? "Base cadastral" : "Não reconhecido"}
-                    </td>
-                    <td>{f.totalLinhas}</td>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Arquivo</th>
+                    <th>Tipo</th>
+                    <th>Linhas</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {files.map((f) => (
+                    <tr key={f.path}>
+                      <td>{f.path}</td>
+                      <td>
+                        {f.tipo === "field" ? "Field" : f.tipo === "cadastral" ? "Base cadastral" : "Não reconhecido"}
+                      </td>
+                      <td>{f.totalLinhas}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
       </div>
@@ -835,7 +854,7 @@ function TabelaOportunidade({
 }) {
   if (!itens.length) return <Vazio texto="Nenhum candidato encontrado com os dados atuais." />;
   return (
-    <div style={{ overflowX: "auto", maxHeight: 320 }}>
+    <div className="table-scroll short">
       <table>
         <thead>
           <tr>
@@ -854,10 +873,7 @@ function TabelaOportunidade({
               <td>{[a.cidade, a.bairro].filter(Boolean).join(" / ") || "-"}</td>
               <td>{colunaExtra.render(a)}</td>
               <td>
-                <button
-                  onClick={() => onInvestigar(a.matricula)}
-                  style={{ background: "var(--azul-claro)", color: "var(--azul)", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12 }}
-                >
+                <button onClick={() => onInvestigar(a.matricula)} className="btn btn-soft btn-sm">
                   Investigar
                 </button>
               </td>
@@ -866,6 +882,66 @@ function TabelaOportunidade({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function TabelaComExport<T extends { matricula: string }>({
+  titulo,
+  descricao,
+  itens,
+  colunas,
+  nomeArquivo,
+  nomeAba,
+}: {
+  titulo: string;
+  descricao: string;
+  itens: T[];
+  colunas: ColunaExport<T>[];
+  nomeArquivo: string;
+  nomeAba: string;
+}) {
+  return (
+    <section className="card">
+      <div className="toolbar">
+        <div>
+          <h3>
+            {titulo} <span style={{ color: "var(--texto-suave)", fontWeight: 500 }}>({itens.length})</span>
+          </h3>
+          <p className="card-subtitle" style={{ marginBottom: 0 }}>{descricao}</p>
+        </div>
+        <button
+          onClick={() => exportarExcel(itens, colunas, nomeArquivo, nomeAba)}
+          disabled={!itens.length}
+          className="btn btn-success"
+        >
+          Baixar Excel
+        </button>
+      </div>
+      {!itens.length ? (
+        <Vazio texto="Nenhuma matrícula encontrada com os dados atuais." />
+      ) : (
+        <div className="table-scroll short">
+          <table>
+            <thead>
+              <tr>
+                {colunas.map((c) => (
+                  <th key={String(c.chave)}>{c.titulo}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((item) => (
+                <tr key={item.matricula}>
+                  {colunas.map((c) => (
+                    <td key={String(c.chave)}>{String(item[c.chave] ?? "")}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -904,7 +980,7 @@ function DetalheMatricula({
           </p>
           {ultima.parecerCampo && (
             <div style={{ marginBottom: 12 }}>
-              <button onClick={() => onInterpretar(ultima)} disabled={carregando} style={{ ...primaryBtn, opacity: carregando ? 0.6 : 1 }}>
+              <button onClick={() => onInterpretar(ultima)} disabled={carregando} className="btn btn-primary">
                 {carregando ? "Interpretando..." : interpretacao ? "Reinterpretar com IA" : "Interpretar com IA"}
               </button>
               {erro && <p style={{ color: "var(--vermelho)", fontSize: 12, marginTop: 6 }}>{erro}</p>}
@@ -929,7 +1005,7 @@ function DetalheMatricula({
         </>
       )}
       {resultado.historico.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll short">
           <table>
             <thead>
               <tr>
@@ -962,7 +1038,7 @@ function DetalheMatricula({
 
 function Badge({ texto, cor }: { texto: string; cor: string }) {
   return (
-    <span style={{ background: cor, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11, fontWeight: 600 }}>
+    <span className="badge" style={{ background: cor }}>
       {texto}
     </span>
   );
@@ -970,13 +1046,13 @@ function Badge({ texto, cor }: { texto: string; cor: string }) {
 
 function Kpi({ titulo, valor }: { titulo: string; valor: number }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid var(--borda)", borderRadius: 10, padding: "12px 18px", minWidth: 180 }}>
-      <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{titulo}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: "var(--azul)" }}>{valor.toLocaleString("pt-BR")}</div>
+    <div className="kpi">
+      <div className="kpi-label">{titulo}</div>
+      <div className="kpi-value">{valor.toLocaleString("pt-BR")}</div>
     </div>
   );
 }
 
 function Vazio({ texto }: { texto: string }) {
-  return <div style={{ padding: 24, textAlign: "center", color: "var(--texto-suave)", fontSize: 13 }}>{texto}</div>;
+  return <div className="empty-state">{texto}</div>;
 }

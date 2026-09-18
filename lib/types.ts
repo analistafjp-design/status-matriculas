@@ -20,8 +20,15 @@ export type CadastralRow = {
   endereco: string;
   cidade: string;
   bairro: string;
+  categoria: string;
   qtdEconomias: number | null;
   situacaoDocumental: string;
+  periodo: string;
+  periodoChave: string;
+  consumo: number | null;
+};
+
+export type ConsumoPeriodo = {
   periodo: string;
   periodoChave: string;
   consumo: number | null;
@@ -50,6 +57,7 @@ export type CadastroConsolidado = {
   endereco: string;
   cidade: string;
   bairro: string;
+  categoria: string;
   qtdEconomias: number | null;
   situacaoDocumental: string;
   consumoMedio: number | null;
@@ -57,6 +65,7 @@ export type CadastroConsolidado = {
   mesesConsumoZero: number;
   consumoPorEconomia: number | null;
   periodoReferencia: string;
+  historicoConsumo: ConsumoPeriodo[];
 };
 
 export type AlvoRow = CadastroConsolidado & {

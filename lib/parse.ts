@@ -1,7 +1,7 @@
 import { ALIASES_CADASTRAL, ALIASES_FIELD, classificarArquivo, mapearColunas } from "./classify";
 import type { CachedFileData, CadastralRow, SelectedFile, VisitaRow, XlsxWorkbook } from "./types";
 
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 function texto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
@@ -109,6 +109,7 @@ function montarCadastral(rows: Record<string, unknown>[], mapeamento: Record<str
       endereco: mapeamento.endereco ? texto(row[mapeamento.endereco]) : "",
       cidade: mapeamento.cidade ? texto(row[mapeamento.cidade]) : "",
       bairro: mapeamento.bairro ? texto(row[mapeamento.bairro]) : "",
+      categoria: mapeamento.categoria ? texto(row[mapeamento.categoria]) : "",
       qtdEconomias: mapeamento.qtdEconomias ? toInt(row[mapeamento.qtdEconomias]) : null,
       situacaoDocumental: mapeamento.situacaoDocumental ? texto(row[mapeamento.situacaoDocumental]) : "",
       periodo: mapeamento.periodo ? texto(periodoValor) : "único",

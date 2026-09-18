@@ -68,6 +68,7 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
     endereco: string;
     cidade: string;
     bairro: string;
+    categoria: string;
     qtdEconomias: number | null;
     situacaoDocumental: string;
     periodoChave: string;
@@ -84,6 +85,7 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
           endereco: r.endereco,
           cidade: r.cidade,
           bairro: r.bairro,
+          categoria: r.categoria,
           qtdEconomias: r.qtdEconomias,
           situacaoDocumental: r.situacaoDocumental,
           periodoChave: r.periodoChave,
@@ -115,6 +117,7 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
       endereco: est.endereco,
       cidade: est.cidade,
       bairro: est.bairro,
+      categoria: est.categoria,
       qtdEconomias: est.qtdEconomias,
       situacaoDocumental: est.situacaoDocumental,
       consumoMedio,
@@ -122,6 +125,7 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
       mesesConsumoZero,
       consumoPorEconomia,
       periodoReferencia: ultimoPeriodo ? ultimoPeriodo[1].periodo : "",
+      historicoConsumo: periodos.map(([periodoChave, p]) => ({ periodo: p.periodo, periodoChave, consumo: p.consumo })),
     });
   }
 
