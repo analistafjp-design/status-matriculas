@@ -13,12 +13,18 @@ export const ALIASES_FIELD: Record<string, string[]> = {
   os: ["ID da Atividade", "Cód. Protocolo Origem", "OS de Origem", "os"],
   colaborador: ["Recurso", "Técnico", "colaborador"],
   endereco: ["Endereço", "endereco"],
+  cidade: ["Cidade", "cidade"],
+  bairro: ["Bairro", "bairro"],
+  tipoAtividade: ["Tipo de Atividade", "tipo_atividade"],
+  parecerCampo: ["Parecer De Campo", "Parecer de Campo", "parecer_campo"],
   observacao: ["Observação", "Observações", "observacao"],
 };
 
 export const ALIASES_CADASTRAL: Record<string, string[]> = {
   matricula: ["NUM_LIGACAO", "Matrícula", "matricula", "UC"],
   endereco: ["END_LIGACAO", "Endereço", "endereco"],
+  cidade: ["CIDADE", "Cidade", "cidade"],
+  bairro: ["NOM_BAIRRO", "Bairro", "bairro"],
   periodo: ["Mês/Ano", "Mes/Ano", "periodo", "mes_ano"],
   consumo: ["CON_MEDIDO", "CON_FAT_AGUA", "consumo"],
   qtdEconomias: ["TOTAL_ECO", "Numero De Economias", "Quantidade De Economia", "qtd_economias"],

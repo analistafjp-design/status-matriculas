@@ -8,12 +8,18 @@ export type VisitaRow = {
   os: string;
   colaborador: string;
   endereco: string;
+  cidade: string;
+  bairro: string;
+  tipoAtividade: string;
+  parecerCampo: string;
   observacao: string;
 };
 
 export type CadastralRow = {
   matricula: string;
   endereco: string;
+  cidade: string;
+  bairro: string;
   qtdEconomias: number | null;
   situacaoDocumental: string;
   periodo: string;
@@ -42,11 +48,14 @@ export type RegraResfriamento = {
 export type CadastroConsolidado = {
   matricula: string;
   endereco: string;
+  cidade: string;
+  bairro: string;
   qtdEconomias: number | null;
   situacaoDocumental: string;
   consumoMedio: number | null;
   consumoUltimoMes: number | null;
   mesesConsumoZero: number;
+  consumoPorEconomia: number | null;
   periodoReferencia: string;
 };
 
@@ -55,6 +64,15 @@ export type AlvoRow = CadastroConsolidado & {
   dataUltimaVisita: string;
   diasDesdeUltimaVisita: number | null;
   motivoInclusao: string;
+  tipoAtividadeUltimaVisita: string;
+  parecerCampoUltimaVisita: string;
+};
+
+export type InterpretacaoIA = {
+  resumo: string;
+  oportunidade: boolean;
+  categoria: string;
+  recomendacaoVisita: boolean;
 };
 
 export type SelectedFile = {

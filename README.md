@@ -44,10 +44,35 @@ esse histórico completo, não contra um único arquivo.
    silenciosamente).
 5. **Base de alvos** — cruza a base cadastral com o histórico de visitas,
    aplica as regras de resfriamento, e mostra só quem pode ser visitado
-   agora — ordenável por qualquer coluna, com exportação para Excel.
-6. **Consultar histórico** — todas as visitas já registradas de uma
-   matrícula específica.
-7. **Auditoria** — lista todos os arquivos lidos, o tipo identificado e a
+   agora — ordenável por qualquer coluna, com filtro por cidade/bairro, um
+   botão pra ocultar visualmente quem está com status Cancelada, Paralisada
+   ou Pendente (não interessam pro dia a dia, mas continuam contados no
+   histórico) e exportação para Excel.
+6. **Por região** — quantos alvos disponíveis existem em cada cidade/bairro
+   agora, e quantos nunca foram visitados. Clicar numa linha filtra a Base
+   de alvos por aquela região.
+7. **Oportunidades** — três recortes prontos, sem precisar configurar nada:
+   possível incremento de economias (consumo por economia bem acima da
+   média, pode indicar mais unidades no imóvel do que o cadastrado),
+   atualização cadastral pendente (situação documental vazia, irregular,
+   em análise, suspensa ou cancelada) e possível ligação nova/regularização
+   (o texto do Parecer de Campo da última visita menciona palavras como
+   "ligação clandestina", "sem ligação", "obra nova" etc — é uma busca por
+   palavras-chave, pensada pra apontar candidatos pra confirmar na aba
+   seguinte).
+8. **Buscar matrícula(s)** — cole uma ou várias matrículas (uma por linha)
+   ou envie um arquivo com uma coluna de matrícula, e veja pra cada uma: se
+   já foi visitada, tipo de atividade, status, data, cidade/bairro e o
+   texto completo do Parecer de Campo da última visita, com todo o
+   histórico de visitas daquela matrícula. O botão **Interpretar com IA**
+   manda o texto do parecer pra um Worker que consulta a API da Anthropic
+   (Claude) e devolve um resumo curto, se há indício de oportunidade e de
+   que tipo (incremento de economias, ligação nova, atualização cadastral)
+   e se vale agendar nova visita — focado no que interessa pro setor de
+   Cadastro e Crescimento Vegetativo. Isso só funciona no site publicado
+   (ver "IA para interpretar o Parecer de Campo" abaixo); no `next dev`
+   local o botão aparece mas a chamada falha, porque não tem Worker rodando.
+9. **Auditoria** — lista todos os arquivos lidos, o tipo identificado e a
    quantidade de linhas, para conferir se algo não foi reconhecido.
 
 ## Requisitos
@@ -73,10 +98,30 @@ Abre em `http://localhost:3000`.
 npm run build
 ```
 
-Gera um site 100% estático na pasta `out/` — sobe em qualquer host de
-arquivos estáticos (Cloudflare Workers/Pages, Vercel, Netlify, etc.). Não
-precisa de servidor Node.js em produção; nenhuma planilha passa por um
-backend.
+Gera um site 100% estático na pasta `out/`. O deploy usa Cloudflare
+Workers (`npx wrangler deploy`) porque a rota de IA (`worker.js`) precisa
+de um Worker de verdade — as planilhas continuam sem passar por backend
+nenhum, só o texto do Parecer de Campo quando alguém clica em "Interpretar
+com IA".
+
+## IA para interpretar o Parecer de Campo
+
+O botão "Interpretar com IA" (aba **Buscar matrícula(s)**) chama a rota
+`/api/interpretar-parecer`, servida pelo `worker.js`, que repassa o texto
+pra API da Anthropic usando uma chave guardada só no servidor — ela nunca
+chega ao navegador. Pra ligar isso no site publicado:
+
+1. Crie uma chave em [console.anthropic.com](https://console.anthropic.com)
+   (Settings → API Keys).
+2. No painel do Cloudflare: **Workers & Pages → status-matriculas →
+   Settings → Variables and Secrets → Add** → nome `ANTHROPIC_API_KEY`,
+   tipo **Secret**, valor a chave copiada → Save and deploy.
+
+Sem essa variável configurada, o botão continua aparecendo mas mostra um
+erro claro ("IA não configurada neste ambiente") em vez de travar o app.
+Pra testar essa rota localmente antes de publicar: crie um arquivo
+`.dev.vars` na raiz do projeto com `ANTHROPIC_API_KEY="sua-chave"` (esse
+arquivo é ignorado pelo git) e rode `npm run build && npx wrangler dev`.
 
 ## Sobre onde o histórico fica salvo
 
@@ -105,8 +150,12 @@ lib/types.ts                tipos compartilhados
 lib/classify.ts              mapeamento de colunas e classificação do tipo de arquivo
 lib/parse.ts                  leitura de um arquivo (Excel/CSV) para linhas tipadas
 lib/matching.ts                combinação dos arquivos em cima do histórico + geração de alvos
+lib/oportunidades.ts           heurísticas das 3 categorias da aba "Oportunidades"
+lib/buscar-matriculas.ts       extrai matrículas de texto colado ou de um arquivo enviado
+lib/ai.ts                      chamada ao Worker pra interpretar o Parecer de Campo com IA
 lib/idb.ts                     cache local (IndexedDB): arquivos já processados, regras
 lib/fs-access.ts                 leitura recursiva da pasta conectada (File System Access API)
 lib/export-xlsx.ts               exportação da base de alvos para Excel
+worker.js                        Worker do Cloudflare: serve os arquivos estáticos e a rota de IA
 public/vendor/xlsx.full.min.js    leitor de Excel (SheetJS), vendorizado para não depender de CDN
 ```

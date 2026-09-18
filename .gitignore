@@ -2,6 +2,10 @@
 /.next/
 /out/
 
+# Cloudflare Workers (wrangler dev)
+/.wrangler/
+.dev.vars*
+
 # Node
 /node_modules/
 npm-debug.log*

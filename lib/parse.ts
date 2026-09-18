@@ -1,7 +1,7 @@
 import { ALIASES_CADASTRAL, ALIASES_FIELD, classificarArquivo, mapearColunas } from "./classify";
 import type { CachedFileData, CadastralRow, SelectedFile, VisitaRow, XlsxWorkbook } from "./types";
 
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 function texto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
@@ -19,6 +19,15 @@ function toFloat(valor: unknown): number | null {
 function toInt(valor: unknown): number | null {
   const n = toFloat(valor);
   return n === null ? null : Math.trunc(n);
+}
+
+// Exportações de BI costumam terminar com uma linha de rodapé (ex: "Filtros
+// aplicados: ..."), cujo texto às vezes cai justamente na coluna da
+// matrícula. Uma matrícula de verdade é sempre um código curto — isso
+// descarta esse tipo de linha sem depender de ela ser só dígitos (algumas
+// concessionárias usam UC alfanumérica).
+function matriculaValida(matricula: string): boolean {
+  return matricula.length > 0 && matricula.length <= 30 && !/\s/.test(matricula);
 }
 
 // Converte um período tipo "MM/YYYY" ou "YYYY-MM" em algo ordenável
@@ -64,7 +73,7 @@ function montarVisitas(rows: Record<string, unknown>[], mapeamento: Record<strin
     const matricula = mapeamento.matricula ? texto(row[mapeamento.matricula]) : "";
     const dataVisita = mapeamento.dataVisita ? texto(row[mapeamento.dataVisita]) : "";
     const statusBase = mapeamento.status ? texto(row[mapeamento.status]) : "";
-    if (!matricula || !dataVisita || !statusBase) continue;
+    if (!matriculaValida(matricula) || !dataVisita || !statusBase) continue;
 
     const motivoPrincipal = mapeamento.motivo ? texto(row[mapeamento.motivo]) : "";
     const motivoAlt = mapeamento.motivoAlt ? texto(row[mapeamento.motivoAlt]) : "";
@@ -79,6 +88,10 @@ function montarVisitas(rows: Record<string, unknown>[], mapeamento: Record<strin
       os: mapeamento.os ? texto(row[mapeamento.os]) : "",
       colaborador: mapeamento.colaborador ? texto(row[mapeamento.colaborador]) : "",
       endereco: mapeamento.endereco ? texto(row[mapeamento.endereco]) : "",
+      cidade: mapeamento.cidade ? texto(row[mapeamento.cidade]) : "",
+      bairro: mapeamento.bairro ? texto(row[mapeamento.bairro]) : "",
+      tipoAtividade: mapeamento.tipoAtividade ? texto(row[mapeamento.tipoAtividade]) : "",
+      parecerCampo: mapeamento.parecerCampo ? texto(row[mapeamento.parecerCampo]) : "",
       observacao: mapeamento.observacao ? texto(row[mapeamento.observacao]) : "",
     });
   }
@@ -89,11 +102,13 @@ function montarCadastral(rows: Record<string, unknown>[], mapeamento: Record<str
   const resultado: CadastralRow[] = [];
   for (const row of rows) {
     const matricula = mapeamento.matricula ? texto(row[mapeamento.matricula]) : "";
-    if (!matricula) continue;
+    if (!matriculaValida(matricula)) continue;
     const periodoValor = mapeamento.periodo ? row[mapeamento.periodo] : null;
     resultado.push({
       matricula,
       endereco: mapeamento.endereco ? texto(row[mapeamento.endereco]) : "",
+      cidade: mapeamento.cidade ? texto(row[mapeamento.cidade]) : "",
+      bairro: mapeamento.bairro ? texto(row[mapeamento.bairro]) : "",
       qtdEconomias: mapeamento.qtdEconomias ? toInt(row[mapeamento.qtdEconomias]) : null,
       situacaoDocumental: mapeamento.situacaoDocumental ? texto(row[mapeamento.situacaoDocumental]) : "",
       periodo: mapeamento.periodo ? texto(periodoValor) : "único",

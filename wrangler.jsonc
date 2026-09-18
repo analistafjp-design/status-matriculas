@@ -1,10 +1,15 @@
 {
-  // Serve o export estático do Next.js (pasta ./out). O app não tem
-  // backend: toda leitura de planilha acontece no navegador, via File
-  // System Access API. Nenhuma linha das planilhas passa por aqui.
+  // Serve o export estático do Next.js (pasta ./out). O app continua sem
+  // backend para as planilhas: toda leitura acontece no navegador, via
+  // File System Access API. O único código de servidor (worker.js) existe
+  // pra fazer a ponte com a API da Anthropic (rota /api/interpretar-parecer)
+  // sem expor a chave no navegador — nenhuma planilha passa por ele.
   "name": "status-matriculas",
+  "main": "./worker.js",
   "compatibility_date": "2026-09-18",
   "assets": {
-    "directory": "./out"
+    "directory": "./out",
+    "binding": "ASSETS",
+    "run_worker_first": true
   }
 }

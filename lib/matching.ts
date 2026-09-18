@@ -66,6 +66,8 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
 
   type Estatico = {
     endereco: string;
+    cidade: string;
+    bairro: string;
     qtdEconomias: number | null;
     situacaoDocumental: string;
     periodoChave: string;
@@ -80,6 +82,8 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
       if (!atual || r.periodoChave >= atual.periodoChave) {
         estaticos.set(r.matricula, {
           endereco: r.endereco,
+          cidade: r.cidade,
+          bairro: r.bairro,
           qtdEconomias: r.qtdEconomias,
           situacaoDocumental: r.situacaoDocumental,
           periodoChave: r.periodoChave,
@@ -103,15 +107,20 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
     const consumoMedio = consumos.length ? consumos.reduce((a, b) => a + b, 0) / consumos.length : null;
     const ultimoPeriodo = periodos.at(-1);
     const mesesConsumoZero = periodos.filter(([, p]) => p.consumo === 0).length;
+    const consumoPorEconomia =
+      consumoMedio !== null && est.qtdEconomias ? consumoMedio / est.qtdEconomias : null;
 
     cadastroConsolidado.set(matricula, {
       matricula,
       endereco: est.endereco,
+      cidade: est.cidade,
+      bairro: est.bairro,
       qtdEconomias: est.qtdEconomias,
       situacaoDocumental: est.situacaoDocumental,
       consumoMedio,
       consumoUltimoMes: ultimoPeriodo ? ultimoPeriodo[1].consumo : null,
       mesesConsumoZero,
+      consumoPorEconomia,
       periodoReferencia: ultimoPeriodo ? ultimoPeriodo[1].periodo : "",
     });
   }
@@ -130,12 +139,16 @@ export function gerarAlvos(estado: EstadoDerivado, regras: RegraResfriamento[]):
     let statusUltimaVisita = "";
     let dataUltimaVisita = "";
     let diasDesdeUltimaVisita: number | null = null;
+    let tipoAtividadeUltimaVisita = "";
+    let parecerCampoUltimaVisita = "";
 
     if (!ultima) {
       motivoInclusao = "Nunca visitado";
     } else {
       statusUltimaVisita = ultima.status;
       dataUltimaVisita = ultima.dataVisita;
+      tipoAtividadeUltimaVisita = ultima.tipoAtividade;
+      parecerCampoUltimaVisita = ultima.parecerCampo;
       const dataDt = parseData(ultima.dataVisita);
       diasDesdeUltimaVisita = dataDt ? Math.floor((hoje.getTime() - dataDt.getTime()) / 86_400_000) : null;
       const diasRegra = mapaRegras.get(ultima.status);
@@ -151,7 +164,15 @@ export function gerarAlvos(estado: EstadoDerivado, regras: RegraResfriamento[]):
       }
     }
 
-    resultado.push({ ...cad, statusUltimaVisita, dataUltimaVisita, diasDesdeUltimaVisita, motivoInclusao });
+    resultado.push({
+      ...cad,
+      statusUltimaVisita,
+      dataUltimaVisita,
+      diasDesdeUltimaVisita,
+      motivoInclusao,
+      tipoAtividadeUltimaVisita,
+      parecerCampoUltimaVisita,
+    });
   }
   return resultado;
 }
