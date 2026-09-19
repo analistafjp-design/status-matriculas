@@ -52,40 +52,18 @@ function formatarPeriodoChave(periodoChave: string): string {
   return nomeMes ? `${nomeMes}/${m[1]}` : periodoChave;
 }
 
-// O mês corrente costuma aparecer na base com bem menos leituras do que um
-// mês fechado (os técnicos ainda estão lendo os hidrômetros) — se ele
-// entrasse na janela, quase ninguém bateria "3 meses" só por falta de
-// leitura, não por estar realmente OK. Por isso um período só entra na
-// janela se tiver pelo menos 70% das leituras do pico (mês mais completo
-// já lido) — abaixo disso é tratado como "ainda em aberto" e pulado.
-const LIMIAR_MES_FECHADO = 0.7;
-
-// Os três meses mais recentes e já fechados que existem em QUALQUER
-// matrícula da base cadastral já lida — a mesma janela vale pra todo mundo
-// (ex: sempre Junho/Julho/Agosto, pulando um Setembro ainda incompleto),
-// não varia matrícula a matrícula.
-function ultimosTresMesesGlobais(cadastro: CadastroConsolidado[]): string[] {
-  const contagem = new Map<string, number>();
-  for (const c of cadastro) {
-    for (const p of c.historicoConsumo) {
-      if (p.consumo === null) continue;
-      contagem.set(p.periodoChave, (contagem.get(p.periodoChave) ?? 0) + 1);
-    }
-  }
-  if (!contagem.size) return [];
-  const pico = Math.max(...contagem.values());
-  return [...contagem.keys()]
-    .filter((chave) => (contagem.get(chave) ?? 0) >= pico * LIMIAR_MES_FECHADO)
-    .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
-    .slice(0, 3);
-}
-
+// Cada matrícula usa os 3 meses mais recentes que ELA MESMA já tem
+// registrados na base cadastral — não uma janela fixa igual pra todo
+// mundo. Isso importa porque nem toda matrícula é lida no mesmo ritmo: se
+// uma janela fixa sempre olhasse, por exemplo, só até agosto, uma
+// matrícula que já tem setembro lido e já normalizou o consumo ficaria
+// presa numa lista desatualizada. Usando o histórico da própria matrícula,
+// quem já tem leitura mais recente é avaliado por ela; quem ainda não tem
+// cai automaticamente para os meses anteriores.
 export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
   tresMeses: EstouroConsumo[];
   doisMeses: EstouroConsumo[];
-  janela: string[];
 } {
-  const janelaChaves = ultimosTresMesesGlobais(cadastro);
   const tresMeses: EstouroConsumo[] = [];
   const doisMeses: EstouroConsumo[] = [];
 
@@ -93,10 +71,10 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
     const info = limiteDaCategoria(cad.categoria);
     if (!info) continue;
 
-    const periodosNaJanela = cad.historicoConsumo
-      .filter((p) => janelaChaves.includes(p.periodoChave))
-      .sort((a, b) => (a.periodoChave < b.periodoChave ? -1 : 1));
-    const estourados = periodosNaJanela.filter((p) => p.consumo !== null && p.consumo > info.limite);
+    const ultimos = [...cad.historicoConsumo]
+      .sort((a, b) => (a.periodoChave < b.periodoChave ? -1 : 1))
+      .slice(-3);
+    const estourados = ultimos.filter((p) => p.consumo !== null && p.consumo > info.limite);
     if (estourados.length < 2) continue;
 
     const item: EstouroConsumo = {
@@ -114,7 +92,7 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
 
   tresMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));
   doisMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));
-  return { tresMeses, doisMeses, janela: janelaChaves.slice().reverse().map(formatarPeriodoChave) };
+  return { tresMeses, doisMeses };
 }
 
 // Conjuntos habitacionais legitimamente têm muitas economias numa única

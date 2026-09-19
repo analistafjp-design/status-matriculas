@@ -636,13 +636,15 @@ export default function DashboardClient() {
           <div className="card-stack">
             <div className="info-banner">
               Limites considerados: <strong>Social até 15m³</strong> e <strong>Pequeno Comércio até 10m³</strong> por
-              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. Meses considerados
-              (os 3 mais recentes já lidos da base cadastral):{" "}
-              <strong>{estourosConsumo.janela.length ? estourosConsumo.janela.join(", ") : "—"}</strong>.
+              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. Cada matrícula é
+              avaliada pelos <strong>3 meses mais recentes que ela mesma já tem lidos</strong> — quem já tem
+              setembro lido usa julho/agosto/setembro; quem ainda não tem cai automaticamente pra
+              junho/julho/agosto. A coluna &quot;Meses estourados (detalhe)&quot; mostra exatamente quais meses
+              entraram na conta de cada linha.
             </div>
             <TabelaComExport
               titulo="Estouraram consumo nos últimos 3 meses"
-              descricao={`Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses mais recentes (${estourosConsumo.janela.join(", ") || "—"}).`}
+              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses mais recentes já lidos para cada matrícula."
               itens={estourosConsumo.tresMeses}
               colunas={COLUNAS_ESTOURO}
               nomeArquivo="estouro_consumo_3_meses.xlsx"
