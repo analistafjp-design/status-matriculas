@@ -23,6 +23,19 @@ function limiteDaCategoria(categoria: string): { rotulo: string; limite: number 
   return encontrado ? { rotulo: encontrado.rotulo, limite: encontrado.limite } : null;
 }
 
+// Conjuntos habitacionais legitimamente têm muitas economias e consumo
+// agregado alto numa única matrícula — o endereço desses casos reais
+// sempre carrega um desses termos (ex: "CONJ.HABIT.", "BLOCO 01 BNH", nome
+// de companhia de habitação). Excluídos de todas as listas desta aba:
+// tanto consumo quanto número de economias vêm inflados por serem várias
+// unidades numa matrícula só, não uma anomalia de cadastro.
+const PALAVRAS_CONJUNTO_HABITACIONAL = ["conj", "habit", "cohab", "cehab", "bnh"];
+
+export function ehConjuntoHabitacional(endereco: string): boolean {
+  const e = endereco.toLowerCase();
+  return PALAVRAS_CONJUNTO_HABITACIONAL.some((p) => e.includes(p));
+}
+
 export type EstouroConsumo = CadastroConsolidado & {
   categoriaRotulo: string;
   limite: number;
@@ -119,6 +132,7 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
   for (const cad of cadastro) {
     const info = limiteDaCategoria(cad.categoria);
     if (!info) continue;
+    if (ehConjuntoHabitacional(cad.endereco)) continue;
 
     const periodos3 = periodosDaJanela(cad.historicoConsumo, janela3);
     const estourados3 = periodos3.filter((p) => estourouPeriodo(p, info.limite));
@@ -149,17 +163,6 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
   tresMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));
   doisMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));
   return { tresMeses, doisMeses };
-}
-
-// Conjuntos habitacionais legitimamente têm muitas economias numa única
-// matrícula — o endereço desses casos reais sempre carrega um desses
-// termos (ex: "CONJ.HABIT.", "BLOCO 01 BNH", nome de companhia de
-// habitação). Servem pra excluir o que não é uma anomalia de cadastro.
-const PALAVRAS_CONJUNTO_HABITACIONAL = ["conj", "habit", "cohab", "cehab", "bnh"];
-
-export function ehConjuntoHabitacional(endereco: string): boolean {
-  const e = endereco.toLowerCase();
-  return PALAVRAS_CONJUNTO_HABITACIONAL.some((p) => e.includes(p));
 }
 
 export function calcularSocialMultiEconomia(cadastro: CadastroConsolidado[]): CadastroConsolidado[] {
