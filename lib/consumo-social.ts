@@ -116,16 +116,36 @@ function periodosDaJanela(historico: ConsumoPeriodo[], janela: string[]): Consum
     .filter((p): p is ConsumoPeriodo => Boolean(p));
 }
 
-// Critério: "os dois meses anteriores" (ex: Julho e Agosto) pro radar —
-// nunca o mês corrente, mesmo que ele já tenha alguma leitura pontual.
-// Quando Setembro fechar, ele vira o terceiro mês e vira candidato à aba
-// de 3 meses (Julho/Agosto/Setembro).
+function proximoPeriodoChave(chave: string): string | null {
+  const m = chave.match(/^(\d{4})(\d{2})$/);
+  if (!m) return null;
+  let ano = Number(m[1]);
+  let mes = Number(m[2]) + 1;
+  if (mes > 12) {
+    mes = 1;
+    ano += 1;
+  }
+  return `${ano}${String(mes).padStart(2, "0")}`;
+}
+
+function temLeitura(p: ConsumoPeriodo): boolean {
+  return p.consumo !== null || p.consumoFaturado !== null;
+}
+
+// Base: os 2 meses fechados mais recentes (ex: Julho e Agosto) — o mês
+// corrente não conta como base porque a maioria das matrículas ainda nem
+// foi lida nele. O terceiro mês é o mês seguinte a essa base (ex:
+// Setembro), e ele entra na conta POR MATRÍCULA, só quando aquela
+// matrícula já tem leitura dele:
+//   - já tem leitura e também estourou  -> lista de 3 meses
+//   - já tem leitura e ficou no limite  -> fica no radar (normalizou)
+//   - ainda não foi lida nesse mês      -> fica no radar (aguardando)
 export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
   tresMeses: EstouroConsumo[];
   doisMeses: EstouroConsumo[];
 } {
-  const janela3 = ultimosMesesFechados(cadastro, 3);
-  const janela2 = janela3.slice(-2);
+  const base = ultimosMesesFechados(cadastro, 2);
+  const mesSeguinte = base.length === 2 ? proximoPeriodoChave(base[1]) : null;
 
   const tresMeses: EstouroConsumo[] = [];
   const doisMeses: EstouroConsumo[] = [];
@@ -135,30 +155,34 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
     if (!info) continue;
     if (ehConjuntoHabitacional(cad.endereco)) continue;
 
-    const periodos3 = periodosDaJanela(cad.historicoConsumo, janela3);
-    const estourados3 = periodos3.filter((p) => estourouPeriodo(p, info.limite));
-    if (janela3.length === 3 && estourados3.length === 3) {
+    const periodosBase = periodosDaJanela(cad.historicoConsumo, base);
+    if (periodosBase.length !== 2) continue;
+    if (!periodosBase.every((p) => estourouPeriodo(p, info.limite))) continue;
+
+    const terceiro = mesSeguinte
+      ? cad.historicoConsumo.find((p) => p.periodoChave === mesSeguinte && temLeitura(p))
+      : undefined;
+
+    if (terceiro && estourouPeriodo(terceiro, info.limite)) {
       tresMeses.push({
         ...cad,
         categoriaRotulo: info.rotulo,
         limite: info.limite,
         mesesEstourados: 3,
-        ultimosPeriodos: estourados3.map(formatarPeriodo).join(" · "),
+        ultimosPeriodos: [...periodosBase, terceiro].map(formatarPeriodo).join(" · "),
       });
       continue;
     }
 
-    const periodos2 = periodosDaJanela(cad.historicoConsumo, janela2);
-    const estourados2 = periodos2.filter((p) => estourouPeriodo(p, info.limite));
-    if (janela2.length === 2 && estourados2.length === 2) {
-      doisMeses.push({
-        ...cad,
-        categoriaRotulo: info.rotulo,
-        limite: info.limite,
-        mesesEstourados: 2,
-        ultimosPeriodos: estourados2.map(formatarPeriodo).join(" · "),
-      });
-    }
+    const detalhe = periodosBase.map(formatarPeriodo);
+    if (terceiro) detalhe.push(`${formatarPeriodo(terceiro)} (dentro do limite)`);
+    doisMeses.push({
+      ...cad,
+      categoriaRotulo: info.rotulo,
+      limite: info.limite,
+      mesesEstourados: 2,
+      ultimosPeriodos: detalhe.join(" · "),
+    });
   }
 
   tresMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));

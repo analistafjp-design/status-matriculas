@@ -79,21 +79,27 @@ esse histórico completo, não contra um único arquivo.
    Exigir os dois evita o falso positivo mais comum: ligação sem consumo
    real (hidrômetro em 0, às vezes cortada) que mesmo assim recebe uma
    cobrança mínima acima do limite — faturado alto sozinho não é consumo de
-   verdade. O mês corrente nunca entra na conta enquanto não estiver "fechado" — um
-   período só conta como fechado quando tem pelo menos 70% das leituras do
-   mês mais completo já lido (os técnicos ainda estão lendo os hidrômetros
-   ao longo do mês). O radar usa sempre os **2 meses fechados anteriores**
-   (ex: Julho e Agosto); quando o mês corrente fecha, ele vira o terceiro e
-   passa a valer pra aba de 3 meses (Julho/Agosto/Setembro). A coluna "Meses
-   estourados (detalhe)" mostra exatamente quais meses entraram na conta de
-   cada linha. **Conjuntos habitacionais são excluídos de todas as listas**
+   verdade. A base de comparação são os **2 meses fechados mais recentes**
+   (ex: Julho e Agosto) — um mês só conta como fechado quando tem pelo menos
+   70% das leituras do mês mais completo já lido, porque os técnicos vão
+   lendo os hidrômetros aos poucos ao longo do mês. O **terceiro mês**
+   (ex: Setembro) entra **por matrícula, assim que aquela matrícula tiver
+   leitura dele**:
+   - já tem leitura e também estourou → lista de **3 meses**;
+   - já tem leitura e voltou pra dentro do limite → fica no **radar**
+     (normalizou, não é mais caso confirmado);
+   - ainda não foi lida nesse mês → fica no **radar**, aguardando.
+
+   A coluna "Meses estourados (detalhe)" mostra o medido e o faturado de
+   cada mês considerado, incluindo o terceiro mês quando ele ficou dentro
+   do limite. **Conjuntos habitacionais são excluídos de todas as listas**
    desta aba (reconhecidos pelo endereço: "CONJ.HABIT.", "BNH", "COHAB"
    etc) — consumo agregado de várias unidades numa matrícula só não é a
    anomalia que interessa aqui. Social e Pequeno Comércio ficam em cards
    separados (cada um com sua lista de 3 meses e de radar), e cada lista
    tem cidade/bairro e botão de Excel:
-   - **Estouraram os 3 meses** (por categoria) — consumo acima do limite
-     nos 3 meses fechados mais recentes.
+   - **Estouraram os 3 meses** (por categoria) — os 2 meses fechados mais o
+     terceiro mês já lido, todos acima do limite.
    - **No radar (2 meses fechados anteriores)** (por categoria) — ainda não
      são os 3, mas já merece acompanhamento — um mapeamento do que pode
      virar caso confirmado assim que o mês corrente fechar.
