@@ -26,12 +26,14 @@ export type CadastralRow = {
   periodo: string;
   periodoChave: string;
   consumo: number | null;
+  consumoFaturado: number | null;
 };
 
 export type ConsumoPeriodo = {
   periodo: string;
   periodoChave: string;
   consumo: number | null;
+  consumoFaturado: number | null;
 };
 
 export type CachedFileData = {

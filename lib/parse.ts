@@ -1,7 +1,7 @@
 import { ALIASES_CADASTRAL, ALIASES_FIELD, classificarArquivo, mapearColunas } from "./classify";
 import type { CachedFileData, CadastralRow, SelectedFile, VisitaRow, XlsxWorkbook } from "./types";
 
-export const PARSER_VERSION = 3;
+export const PARSER_VERSION = 4;
 
 function texto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
@@ -115,6 +115,7 @@ function montarCadastral(rows: Record<string, unknown>[], mapeamento: Record<str
       periodo: mapeamento.periodo ? texto(periodoValor) : "único",
       periodoChave: mapeamento.periodo ? periodoOrdenavel(periodoValor) : "0",
       consumo: mapeamento.consumo ? toFloat(row[mapeamento.consumo]) : null,
+      consumoFaturado: mapeamento.consumoFaturado ? toFloat(row[mapeamento.consumoFaturado]) : null,
     });
   }
   return resultado;

@@ -74,7 +74,10 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
     periodoChave: string;
   };
   const estaticos = new Map<string, Estatico>();
-  const consumoPorMatricula = new Map<string, Map<string, { periodo: string; consumo: number | null }>>();
+  const consumoPorMatricula = new Map<
+    string,
+    Map<string, { periodo: string; consumo: number | null; consumoFaturado: number | null }>
+  >();
 
   for (const f of files) {
     if (f.tipo !== "cadastral") continue;
@@ -96,7 +99,7 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
         periodos = new Map();
         consumoPorMatricula.set(r.matricula, periodos);
       }
-      periodos.set(r.periodoChave, { periodo: r.periodo, consumo: r.consumo });
+      periodos.set(r.periodoChave, { periodo: r.periodo, consumo: r.consumo, consumoFaturado: r.consumoFaturado });
     }
   }
 
@@ -125,7 +128,12 @@ export function combinarArquivos(files: CachedFileData[]): EstadoDerivado {
       mesesConsumoZero,
       consumoPorEconomia,
       periodoReferencia: ultimoPeriodo ? ultimoPeriodo[1].periodo : "",
-      historicoConsumo: periodos.map(([periodoChave, p]) => ({ periodo: p.periodo, periodoChave, consumo: p.consumo })),
+      historicoConsumo: periodos.map(([periodoChave, p]) => ({
+        periodo: p.periodo,
+        periodoChave,
+        consumo: p.consumo,
+        consumoFaturado: p.consumoFaturado,
+      })),
     });
   }
 

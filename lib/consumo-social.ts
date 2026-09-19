@@ -52,6 +52,23 @@ function formatarPeriodoChave(periodoChave: string): string {
   return nomeMes ? `${nomeMes}/${m[1]}` : periodoChave;
 }
 
+// Conta como estourado se o consumo MEDIDO ou o FATURADO passar do limite —
+// em muitos casos a concessionária fatura por média/estimativa em vez do
+// que o hidrômetro realmente mediu, então os dois têm que ser conferidos.
+function estourouPeriodo(p: ConsumoPeriodo, limite: number): boolean {
+  const medidoEstoura = p.consumo !== null && p.consumo > limite;
+  const faturadoEstoura = p.consumoFaturado !== null && p.consumoFaturado > limite;
+  return medidoEstoura || faturadoEstoura;
+}
+
+function formatarPeriodo(p: ConsumoPeriodo): string {
+  const partes = [
+    p.consumo !== null ? `medido ${p.consumo}m³` : null,
+    p.consumoFaturado !== null ? `faturado ${p.consumoFaturado}m³` : null,
+  ].filter((v): v is string => v !== null);
+  return `${formatarPeriodoChave(p.periodoChave)}: ${partes.join(" · ") || "-"}`;
+}
+
 // O mês corrente aparece na base com bem menos leituras do que um mês já
 // fechado (os técnicos ainda estão lendo os hidrômetros ao longo do mês) —
 // por isso ele não entra em nenhuma conta até "fechar": um período só
@@ -104,27 +121,27 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
     if (!info) continue;
 
     const periodos3 = periodosDaJanela(cad.historicoConsumo, janela3);
-    const estourados3 = periodos3.filter((p) => p.consumo !== null && p.consumo > info.limite);
+    const estourados3 = periodos3.filter((p) => estourouPeriodo(p, info.limite));
     if (janela3.length === 3 && estourados3.length === 3) {
       tresMeses.push({
         ...cad,
         categoriaRotulo: info.rotulo,
         limite: info.limite,
         mesesEstourados: 3,
-        ultimosPeriodos: estourados3.map((p) => `${formatarPeriodoChave(p.periodoChave)}: ${p.consumo}m³`).join(" · "),
+        ultimosPeriodos: estourados3.map(formatarPeriodo).join(" · "),
       });
       continue;
     }
 
     const periodos2 = periodosDaJanela(cad.historicoConsumo, janela2);
-    const estourados2 = periodos2.filter((p) => p.consumo !== null && p.consumo > info.limite);
+    const estourados2 = periodos2.filter((p) => estourouPeriodo(p, info.limite));
     if (janela2.length === 2 && estourados2.length === 2) {
       doisMeses.push({
         ...cad,
         categoriaRotulo: info.rotulo,
         limite: info.limite,
         mesesEstourados: 2,
-        ultimosPeriodos: estourados2.map((p) => `${formatarPeriodoChave(p.periodoChave)}: ${p.consumo}m³`).join(" · "),
+        ultimosPeriodos: estourados2.map(formatarPeriodo).join(" · "),
       });
     }
   }
