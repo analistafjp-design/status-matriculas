@@ -74,12 +74,17 @@ esse histórico completo, não contra um único arquivo.
    local o botão aparece mas a chamada falha, porque não tem Worker rodando.
 9. **Consumo Social/Comércio** — cruza a categoria cadastral (`SUB_CATEGORIA`)
    com o histórico de consumo mensal pra achar quem estourou o limite da
-   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. Três
-   listas, cada uma com cidade/bairro e botão de Excel:
-   - **Estouraram 3 meses seguidos** — consumo acima do limite nos 3
-     últimos períodos lidos da base cadastral.
-   - **No radar (2 dos últimos 3 meses)** — ainda não confirmado, mas já
-     merece acompanhamento — um mapeamento do que pode virar caso.
+   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. A janela
+   é sempre os 3 meses mais recentes **já fechados** — um mês com bem menos
+   leituras que os anteriores (menos de 70% do pico) é tratado como "ainda
+   em aberto" e pulado automaticamente, pra não penalizar quem só está sem
+   leitura ainda naquele mês. O app mostra os nomes dos 3 meses usados
+   (ex: "Junho/2026, Julho/2026, Agosto/2026") no topo da aba. Três listas,
+   cada uma com cidade/bairro e botão de Excel:
+   - **Estouraram os 3 meses** — consumo acima do limite em todos os 3
+     meses da janela.
+   - **No radar (2 dos 3 meses)** — ainda não são os 3, mas já merece
+     acompanhamento — um mapeamento do que pode virar caso confirmado.
    - **Social com mais de 1 economia** — categoria Social com mais de uma
      economia na mesma matrícula, excluindo conjuntos habitacionais
      (reconhecidos pelo endereço: "CONJ.HABIT.", "BNH", "COHAB" etc — esses

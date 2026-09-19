@@ -71,7 +71,7 @@ const COLUNAS_ESTOURO: ColunaExport<EstouroConsumo>[] = [
   { chave: "categoriaRotulo", titulo: "Categoria" },
   { chave: "limite", titulo: "Limite (m³)" },
   { chave: "mesesEstourados", titulo: "Meses estourados" },
-  { chave: "ultimosPeriodos", titulo: "Últimos períodos" },
+  { chave: "ultimosPeriodos", titulo: "Meses estourados (detalhe)" },
   { chave: "qtdEconomias", titulo: "Qtd. economias" },
 ];
 
@@ -636,13 +636,13 @@ export default function DashboardClient() {
           <div className="card-stack">
             <div className="info-banner">
               Limites considerados: <strong>Social até 15m³</strong> e <strong>Pequeno Comércio até 10m³</strong> por
-              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. A janela é sempre os
-              últimos períodos de consumo já lidos da base cadastral (não um calendário fixo) — por isso matrículas
-              com menos de 2 períodos de histórico não entram nessa análise.
+              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. Meses considerados
+              (os 3 mais recentes já lidos da base cadastral):{" "}
+              <strong>{estourosConsumo.janela.length ? estourosConsumo.janela.join(", ") : "—"}</strong>.
             </div>
             <TabelaComExport
-              titulo="Estouraram consumo por 3 meses seguidos"
-              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 últimos períodos lidos."
+              titulo="Estouraram consumo nos últimos 3 meses"
+              descricao={`Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses mais recentes (${estourosConsumo.janela.join(", ") || "—"}).`}
               itens={estourosConsumo.tresMeses}
               colunas={COLUNAS_ESTOURO}
               nomeArquivo="estouro_consumo_3_meses.xlsx"
@@ -650,7 +650,7 @@ export default function DashboardClient() {
             />
             <TabelaComExport
               titulo="No radar: estouraram 2 dos últimos 3 meses"
-              descricao="Ainda não são 3 meses seguidos, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado."
+              descricao="Ainda não são os 3 meses, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado."
               itens={estourosConsumo.doisMeses}
               colunas={COLUNAS_ESTOURO}
               nomeArquivo="estouro_consumo_radar_2_meses.xlsx"
