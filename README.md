@@ -82,12 +82,14 @@ esse histórico completo, não contra um único arquivo.
    (ex: Julho e Agosto); quando o mês corrente fecha, ele vira o terceiro e
    passa a valer pra aba de 3 meses (Julho/Agosto/Setembro). A coluna "Meses
    estourados (detalhe)" mostra exatamente quais meses entraram na conta de
-   cada linha. Três listas, cada uma com cidade/bairro e botão de Excel:
-   - **Estouraram os 3 meses** — consumo acima do limite nos 3 meses
-     fechados mais recentes (os mesmos pra todo mundo).
-   - **No radar (2 meses fechados anteriores)** — ainda não são os 3, mas já
-     merece acompanhamento — um mapeamento do que pode virar caso
-     confirmado assim que o mês corrente fechar.
+   cada linha. Social e Pequeno Comércio ficam em cards separados (cada um
+   com sua lista de 3 meses e de radar), e cada lista tem cidade/bairro e
+   botão de Excel:
+   - **Estouraram os 3 meses** (por categoria) — consumo acima do limite
+     nos 3 meses fechados mais recentes.
+   - **No radar (2 meses fechados anteriores)** (por categoria) — ainda não
+     são os 3, mas já merece acompanhamento — um mapeamento do que pode
+     virar caso confirmado assim que o mês corrente fechar.
    - **Social com mais de 1 economia** — categoria Social com mais de uma
      economia na mesma matrícula, excluindo conjuntos habitacionais
      (reconhecidos pelo endereço: "CONJ.HABIT.", "BNH", "COHAB" etc — esses

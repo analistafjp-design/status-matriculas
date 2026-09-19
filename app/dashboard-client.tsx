@@ -68,8 +68,6 @@ const COLUNAS_ESTOURO: ColunaExport<EstouroConsumo>[] = [
   { chave: "endereco", titulo: "Endereço" },
   { chave: "cidade", titulo: "Cidade" },
   { chave: "bairro", titulo: "Bairro" },
-  { chave: "categoriaRotulo", titulo: "Categoria" },
-  { chave: "limite", titulo: "Limite (m³)" },
   { chave: "mesesEstourados", titulo: "Meses estourados" },
   { chave: "ultimosPeriodos", titulo: "Meses estourados (detalhe)" },
   { chave: "qtdEconomias", titulo: "Qtd. economias" },
@@ -302,6 +300,23 @@ export default function DashboardClient() {
   const cadastroCompleto = useMemo(() => [...estado.cadastroConsolidado.values()], [estado]);
   const estourosConsumo = useMemo(() => calcularEstourosConsumo(cadastroCompleto), [cadastroCompleto]);
   const socialMultiEconomia = useMemo(() => calcularSocialMultiEconomia(cadastroCompleto), [cadastroCompleto]);
+
+  const socialTresMeses = useMemo(
+    () => estourosConsumo.tresMeses.filter((a) => a.categoriaRotulo === "Social"),
+    [estourosConsumo]
+  );
+  const socialDoisMeses = useMemo(
+    () => estourosConsumo.doisMeses.filter((a) => a.categoriaRotulo === "Social"),
+    [estourosConsumo]
+  );
+  const pequenoComercioTresMeses = useMemo(
+    () => estourosConsumo.tresMeses.filter((a) => a.categoriaRotulo === "Pequeno Comércio"),
+    [estourosConsumo]
+  );
+  const pequenoComercioDoisMeses = useMemo(
+    () => estourosConsumo.doisMeses.filter((a) => a.categoriaRotulo === "Pequeno Comércio"),
+    [estourosConsumo]
+  );
 
   const arquivosDesconhecidos = files.filter((f) => f.tipo === "desconhecido");
   const arquivosField = files.filter((f) => f.tipo === "field");
@@ -642,22 +657,42 @@ export default function DashboardClient() {
               corrente fechar ele vira o terceiro e passa a valer pra aba de 3 meses. A coluna &quot;Meses
               estourados (detalhe)&quot; mostra exatamente quais meses entraram na conta de cada linha.
             </div>
+            <h3 className="section-heading">Social (limite 15m³)</h3>
             <TabelaComExport
               titulo="Estouraram consumo nos últimos 3 meses"
-              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses fechados mais recentes."
-              itens={estourosConsumo.tresMeses}
+              descricao="Social com consumo acima de 15m³ nos 3 meses fechados mais recentes."
+              itens={socialTresMeses}
               colunas={COLUNAS_ESTOURO}
-              nomeArquivo="estouro_consumo_3_meses.xlsx"
-              nomeAba="estouro_3_meses"
+              nomeArquivo="estouro_consumo_social_3_meses.xlsx"
+              nomeAba="social_3_meses"
             />
             <TabelaComExport
               titulo="No radar: estouraram os 2 meses fechados anteriores"
               descricao="Ainda não são os 3 meses, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado assim que o mês corrente fechar."
-              itens={estourosConsumo.doisMeses}
+              itens={socialDoisMeses}
               colunas={COLUNAS_ESTOURO}
-              nomeArquivo="estouro_consumo_radar_2_meses.xlsx"
-              nomeAba="radar_2_meses"
+              nomeArquivo="estouro_consumo_social_radar_2_meses.xlsx"
+              nomeAba="social_radar_2_meses"
             />
+
+            <h3 className="section-heading">Pequeno Comércio (limite 10m³)</h3>
+            <TabelaComExport
+              titulo="Estouraram consumo nos últimos 3 meses"
+              descricao="Pequeno Comércio com consumo acima de 10m³ nos 3 meses fechados mais recentes."
+              itens={pequenoComercioTresMeses}
+              colunas={COLUNAS_ESTOURO}
+              nomeArquivo="estouro_consumo_peq_comercio_3_meses.xlsx"
+              nomeAba="peq_comercio_3_meses"
+            />
+            <TabelaComExport
+              titulo="No radar: estouraram os 2 meses fechados anteriores"
+              descricao="Ainda não são os 3 meses, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado assim que o mês corrente fechar."
+              itens={pequenoComercioDoisMeses}
+              colunas={COLUNAS_ESTOURO}
+              nomeArquivo="estouro_consumo_peq_comercio_radar_2_meses.xlsx"
+              nomeAba="peq_comercio_radar_2_meses"
+            />
+
             <TabelaComExport
               titulo="Social com mais de 1 economia"
               descricao="Categoria Social com mais de uma economia cadastrada na mesma matrícula, excluindo conjuntos habitacionais (identificados pelo endereço: CONJ.HABIT., BNH, COHAB etc)."

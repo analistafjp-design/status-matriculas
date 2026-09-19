@@ -519,3 +519,11 @@ textarea:focus {
   color: var(--azul);
   line-height: 1.6;
 }
+
+.section-heading {
+  margin: 8px 0 -6px;
+  font-size: 14px;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
