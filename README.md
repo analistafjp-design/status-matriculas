@@ -74,11 +74,12 @@ esse histórico completo, não contra um único arquivo.
    local o botão aparece mas a chamada falha, porque não tem Worker rodando.
 9. **Consumo Social/Comércio** — cruza a categoria cadastral (`SUB_CATEGORIA`)
    com o histórico de consumo mensal pra achar quem estourou o limite da
-   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. Conta
-   como estouro se o consumo **medido OU faturado** passar do limite (a
-   concessionária às vezes fatura por média/estimativa em vez do que o
-   hidrômetro realmente mediu — qualquer um dos dois acima do limite já
-   conta). O mês corrente nunca entra na conta enquanto não estiver "fechado" — um
+   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. Só conta
+   como estouro quando o consumo **medido E o faturado** passam do limite.
+   Exigir os dois evita o falso positivo mais comum: ligação sem consumo
+   real (hidrômetro em 0, às vezes cortada) que mesmo assim recebe uma
+   cobrança mínima acima do limite — faturado alto sozinho não é consumo de
+   verdade. O mês corrente nunca entra na conta enquanto não estiver "fechado" — um
    período só conta como fechado quando tem pelo menos 70% das leituras do
    mês mais completo já lido (os técnicos ainda estão lendo os hidrômetros
    ao longo do mês). O radar usa sempre os **2 meses fechados anteriores**

@@ -651,9 +651,9 @@ export default function DashboardClient() {
           <div className="card-stack">
             <div className="info-banner">
               Limites considerados: <strong>Social até 15m³</strong> e <strong>Pequeno Comércio até 10m³</strong> por
-              mês. &quot;Estourou&quot; conta se o consumo <strong>medido OU faturado</strong> passar do limite da
-              categoria (a concessionária às vezes fatura por média/estimativa em vez do que o hidrômetro mediu, e
-              qualquer um dos dois acima do limite conta). O mês corrente nunca entra na conta enquanto não estiver
+              mês. &quot;Estourou&quot; só conta quando o consumo <strong>medido E o faturado</strong> passam do
+              limite da categoria — exigir os dois evita contar ligação sem consumo real (hidrômetro em 0, às vezes
+              cortada) que ainda assim recebe cobrança mínima acima do limite. O mês corrente nunca entra na conta enquanto não estiver
               &quot;fechado&quot; (a maioria das leituras dele já ter chegado) — o radar usa os{" "}
               <strong>2 meses fechados anteriores</strong> (ex: Julho e Agosto), e quando o mês corrente fechar ele
               vira o terceiro e passa a valer pra aba de 3 meses. A coluna &quot;Meses estourados (detalhe)&quot;

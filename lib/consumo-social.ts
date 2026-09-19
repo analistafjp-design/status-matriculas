@@ -65,13 +65,14 @@ function formatarPeriodoChave(periodoChave: string): string {
   return nomeMes ? `${nomeMes}/${m[1]}` : periodoChave;
 }
 
-// Conta como estourado se o consumo MEDIDO ou o FATURADO passar do limite —
-// em muitos casos a concessionária fatura por média/estimativa em vez do
-// que o hidrômetro realmente mediu, então os dois têm que ser conferidos.
+// Só conta como estourado quando o consumo MEDIDO e o FATURADO passam do
+// limite. Exigir os dois evita o falso positivo mais comum: ligação sem
+// consumo real (hidrômetro medindo 0, às vezes cortada) que mesmo assim
+// recebe uma cobrança mínima acima do limite — faturado alto sozinho não
+// é consumo de verdade. Se só um dos dois existir na base, vale esse.
 function estourouPeriodo(p: ConsumoPeriodo, limite: number): boolean {
-  const medidoEstoura = p.consumo !== null && p.consumo > limite;
-  const faturadoEstoura = p.consumoFaturado !== null && p.consumoFaturado > limite;
-  return medidoEstoura || faturadoEstoura;
+  const valores = [p.consumo, p.consumoFaturado].filter((v): v is number => v !== null);
+  return valores.length > 0 && valores.every((v) => v > limite);
 }
 
 function formatarPeriodo(p: ConsumoPeriodo): string {
