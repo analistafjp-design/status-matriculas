@@ -74,19 +74,20 @@ esse histórico completo, não contra um único arquivo.
    local o botão aparece mas a chamada falha, porque não tem Worker rodando.
 9. **Consumo Social/Comércio** — cruza a categoria cadastral (`SUB_CATEGORIA`)
    com o histórico de consumo mensal pra achar quem estourou o limite da
-   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. Cada
-   matrícula é avaliada pelos **3 meses mais recentes que ela mesma já tem
-   lidos** na base cadastral — não uma janela fixa igual pra todo mundo.
-   Isso importa porque a leitura de um mês vai chegando aos poucos ao longo
-   dele: quem já tem o mês corrente lido é avaliado com ele (e sai da lista
-   se já tiver normalizado o consumo); quem ainda não tem cai
-   automaticamente pros meses anteriores. A coluna "Meses estourados
-   (detalhe)" mostra exatamente quais meses entraram na conta de cada
-   linha. Três listas, cada uma com cidade/bairro e botão de Excel:
-   - **Estouraram os 3 meses** — consumo acima do limite nos 3 meses mais
-     recentes já lidos pra aquela matrícula.
-   - **No radar (2 dos 3 meses)** — ainda não são os 3, mas já merece
-     acompanhamento — um mapeamento do que pode virar caso confirmado.
+   categoria: **Social até 15m³** e **Pequeno Comércio até 10m³**. O mês
+   corrente nunca entra na conta enquanto não estiver "fechado" — um
+   período só conta como fechado quando tem pelo menos 70% das leituras do
+   mês mais completo já lido (os técnicos ainda estão lendo os hidrômetros
+   ao longo do mês). O radar usa sempre os **2 meses fechados anteriores**
+   (ex: Julho e Agosto); quando o mês corrente fecha, ele vira o terceiro e
+   passa a valer pra aba de 3 meses (Julho/Agosto/Setembro). A coluna "Meses
+   estourados (detalhe)" mostra exatamente quais meses entraram na conta de
+   cada linha. Três listas, cada uma com cidade/bairro e botão de Excel:
+   - **Estouraram os 3 meses** — consumo acima do limite nos 3 meses
+     fechados mais recentes (os mesmos pra todo mundo).
+   - **No radar (2 meses fechados anteriores)** — ainda não são os 3, mas já
+     merece acompanhamento — um mapeamento do que pode virar caso
+     confirmado assim que o mês corrente fechar.
    - **Social com mais de 1 economia** — categoria Social com mais de uma
      economia na mesma matrícula, excluindo conjuntos habitacionais
      (reconhecidos pelo endereço: "CONJ.HABIT.", "BNH", "COHAB" etc — esses

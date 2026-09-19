@@ -1,4 +1,4 @@
-import type { CadastroConsolidado } from "./types";
+import type { CadastroConsolidado, ConsumoPeriodo } from "./types";
 
 function normalizar(valor: string): string {
   return valor
@@ -52,18 +52,50 @@ function formatarPeriodoChave(periodoChave: string): string {
   return nomeMes ? `${nomeMes}/${m[1]}` : periodoChave;
 }
 
-// Cada matrícula usa os 3 meses mais recentes que ELA MESMA já tem
-// registrados na base cadastral — não uma janela fixa igual pra todo
-// mundo. Isso importa porque nem toda matrícula é lida no mesmo ritmo: se
-// uma janela fixa sempre olhasse, por exemplo, só até agosto, uma
-// matrícula que já tem setembro lido e já normalizou o consumo ficaria
-// presa numa lista desatualizada. Usando o histórico da própria matrícula,
-// quem já tem leitura mais recente é avaliado por ela; quem ainda não tem
-// cai automaticamente para os meses anteriores.
+// O mês corrente aparece na base com bem menos leituras do que um mês já
+// fechado (os técnicos ainda estão lendo os hidrômetros ao longo do mês) —
+// por isso ele não entra em nenhuma conta até "fechar": um período só
+// conta como fechado se tiver pelo menos 70% das leituras do pico (mês
+// mais completo já lido).
+const LIMIAR_MES_FECHADO = 0.7;
+
+// Os N meses fechados mais recentes — a mesma janela vale pra todo mundo
+// (ex: sempre Junho/Julho/Agosto enquanto Setembro não fecha), em ordem
+// crescente (mais antigo primeiro).
+function ultimosMesesFechados(cadastro: CadastroConsolidado[], quantidade: number): string[] {
+  const contagem = new Map<string, number>();
+  for (const c of cadastro) {
+    for (const p of c.historicoConsumo) {
+      if (p.consumo === null) continue;
+      contagem.set(p.periodoChave, (contagem.get(p.periodoChave) ?? 0) + 1);
+    }
+  }
+  if (!contagem.size) return [];
+  const pico = Math.max(...contagem.values());
+  return [...contagem.keys()]
+    .filter((chave) => (contagem.get(chave) ?? 0) >= pico * LIMIAR_MES_FECHADO)
+    .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+    .slice(0, quantidade)
+    .reverse();
+}
+
+function periodosDaJanela(historico: ConsumoPeriodo[], janela: string[]): ConsumoPeriodo[] {
+  return janela
+    .map((chave) => historico.find((p) => p.periodoChave === chave))
+    .filter((p): p is ConsumoPeriodo => Boolean(p));
+}
+
+// Critério: "os dois meses anteriores" (ex: Julho e Agosto) pro radar —
+// nunca o mês corrente, mesmo que ele já tenha alguma leitura pontual.
+// Quando Setembro fechar, ele vira o terceiro mês e vira candidato à aba
+// de 3 meses (Julho/Agosto/Setembro).
 export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
   tresMeses: EstouroConsumo[];
   doisMeses: EstouroConsumo[];
 } {
+  const janela3 = ultimosMesesFechados(cadastro, 3);
+  const janela2 = janela3.slice(-2);
+
   const tresMeses: EstouroConsumo[] = [];
   const doisMeses: EstouroConsumo[] = [];
 
@@ -71,23 +103,30 @@ export function calcularEstourosConsumo(cadastro: CadastroConsolidado[]): {
     const info = limiteDaCategoria(cad.categoria);
     if (!info) continue;
 
-    const ultimos = [...cad.historicoConsumo]
-      .sort((a, b) => (a.periodoChave < b.periodoChave ? -1 : 1))
-      .slice(-3);
-    const estourados = ultimos.filter((p) => p.consumo !== null && p.consumo > info.limite);
-    if (estourados.length < 2) continue;
+    const periodos3 = periodosDaJanela(cad.historicoConsumo, janela3);
+    const estourados3 = periodos3.filter((p) => p.consumo !== null && p.consumo > info.limite);
+    if (janela3.length === 3 && estourados3.length === 3) {
+      tresMeses.push({
+        ...cad,
+        categoriaRotulo: info.rotulo,
+        limite: info.limite,
+        mesesEstourados: 3,
+        ultimosPeriodos: estourados3.map((p) => `${formatarPeriodoChave(p.periodoChave)}: ${p.consumo}m³`).join(" · "),
+      });
+      continue;
+    }
 
-    const item: EstouroConsumo = {
-      ...cad,
-      categoriaRotulo: info.rotulo,
-      limite: info.limite,
-      mesesEstourados: estourados.length,
-      ultimosPeriodos: estourados
-        .map((p) => `${formatarPeriodoChave(p.periodoChave)}: ${p.consumo}m³`)
-        .join(" · "),
-    };
-    if (estourados.length >= 3) tresMeses.push(item);
-    else doisMeses.push(item);
+    const periodos2 = periodosDaJanela(cad.historicoConsumo, janela2);
+    const estourados2 = periodos2.filter((p) => p.consumo !== null && p.consumo > info.limite);
+    if (janela2.length === 2 && estourados2.length === 2) {
+      doisMeses.push({
+        ...cad,
+        categoriaRotulo: info.rotulo,
+        limite: info.limite,
+        mesesEstourados: 2,
+        ultimosPeriodos: estourados2.map((p) => `${formatarPeriodoChave(p.periodoChave)}: ${p.consumo}m³`).join(" · "),
+      });
+    }
   }
 
   tresMeses.sort((a, b) => (b.consumoUltimoMes ?? 0) - (a.consumoUltimoMes ?? 0));

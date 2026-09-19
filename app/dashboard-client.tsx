@@ -636,23 +636,23 @@ export default function DashboardClient() {
           <div className="card-stack">
             <div className="info-banner">
               Limites considerados: <strong>Social até 15m³</strong> e <strong>Pequeno Comércio até 10m³</strong> por
-              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. Cada matrícula é
-              avaliada pelos <strong>3 meses mais recentes que ela mesma já tem lidos</strong> — quem já tem
-              setembro lido usa julho/agosto/setembro; quem ainda não tem cai automaticamente pra
-              junho/julho/agosto. A coluna &quot;Meses estourados (detalhe)&quot; mostra exatamente quais meses
-              entraram na conta de cada linha.
+              mês. &quot;Estourou&quot; significa consumo medido acima do limite da categoria. O mês corrente nunca
+              entra na conta enquanto não estiver &quot;fechado&quot; (a maioria das leituras dele já ter chegado) —
+              o radar usa os <strong>2 meses fechados anteriores</strong> (ex: Julho e Agosto), e quando o mês
+              corrente fechar ele vira o terceiro e passa a valer pra aba de 3 meses. A coluna &quot;Meses
+              estourados (detalhe)&quot; mostra exatamente quais meses entraram na conta de cada linha.
             </div>
             <TabelaComExport
               titulo="Estouraram consumo nos últimos 3 meses"
-              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses mais recentes já lidos para cada matrícula."
+              descricao="Social e Pequeno Comércio com consumo acima do limite da categoria nos 3 meses fechados mais recentes."
               itens={estourosConsumo.tresMeses}
               colunas={COLUNAS_ESTOURO}
               nomeArquivo="estouro_consumo_3_meses.xlsx"
               nomeAba="estouro_3_meses"
             />
             <TabelaComExport
-              titulo="No radar: estouraram 2 dos últimos 3 meses"
-              descricao="Ainda não são os 3 meses, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado."
+              titulo="No radar: estouraram os 2 meses fechados anteriores"
+              descricao="Ainda não são os 3 meses, mas já merecem acompanhamento — um mapeamento do que pode virar caso confirmado assim que o mês corrente fechar."
               itens={estourosConsumo.doisMeses}
               colunas={COLUNAS_ESTOURO}
               nomeArquivo="estouro_consumo_radar_2_meses.xlsx"
