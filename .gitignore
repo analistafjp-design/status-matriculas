@@ -14,9 +14,9 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Gerados automaticamente por `next dev` (aponta pra docs locais em
-# node_modules) — não é conteúdo do projeto.
+# Gerado automaticamente por `next dev` (aponta pra docs locais em
+# node_modules) — não é conteúdo do projeto. O CLAUDE.md, ao contrário, é
+# versionado: tem as instruções do projeto para a Claude.
 /AGENTS.md
-/CLAUDE.md
 
 .DS_Store
